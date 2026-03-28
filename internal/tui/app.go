@@ -41,6 +41,8 @@ func (m App) Init() tea.Cmd {
 }
 
 func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -49,9 +51,31 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		detailWidth := m.width - browserWidth
 		browserMsg := tea.WindowSizeMsg{Width: browserWidth, Height: m.height - 1}
 		detailMsg := tea.WindowSizeMsg{Width: detailWidth, Height: m.height - 1}
-		m.browser, _ = m.browser.Update(browserMsg)
-		m.detail, _ = m.detail.Update(detailMsg)
+		var bc, dc tea.Cmd
+		m.browser, bc = m.browser.Update(browserMsg)
+		m.detail, dc = m.detail.Update(detailMsg)
+		return m, tea.Batch(bc, dc)
+
+	case RequestSelected:
+		m.detail, _ = m.detail.Update(msg)
+		m.showSearch = false
 		return m, nil
+
+	case SearchSelected:
+		m.showSearch = false
+		fakeMsg := RequestSelected{Request: msg.Request}
+		m.detail, _ = m.detail.Update(fakeMsg)
+		return m, nil
+
+	case EnvChanged:
+		m.currentEnv = msg.Name
+		m.showEnvSwitch = false
+		return m, nil
+
+	case responseReceived:
+		var cmd tea.Cmd
+		m.detail, cmd = m.detail.Update(msg)
+		return m, cmd
 
 	case tea.KeyPressMsg:
 		if m.showSearch {
@@ -60,8 +84,10 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.showSearch = false
 				return m, nil
 			}
-			m.search, _ = m.search.Update(msg)
-			return m, nil
+			var cmd tea.Cmd
+			m.search, cmd = m.search.Update(msg)
+			cmds = append(cmds, cmd)
+			return m, tea.Batch(cmds...)
 		}
 		if m.showEnvSwitch {
 			switch msg.String() {
@@ -69,8 +95,10 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.showEnvSwitch = false
 				return m, nil
 			}
-			m.envSwitch, _ = m.envSwitch.Update(msg)
-			return m, nil
+			var cmd tea.Cmd
+			m.envSwitch, cmd = m.envSwitch.Update(msg)
+			cmds = append(cmds, cmd)
+			return m, tea.Batch(cmds...)
 		}
 
 		switch msg.String() {
@@ -91,15 +119,17 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		var cmd tea.Cmd
 		switch m.focus {
 		case PaneBrowser:
-			m.browser, _ = m.browser.Update(msg)
+			m.browser, cmd = m.browser.Update(msg)
 		case PaneDetail:
-			m.detail, _ = m.detail.Update(msg)
+			m.detail, cmd = m.detail.Update(msg)
 		}
+		cmds = append(cmds, cmd)
 	}
 
-	return m, nil
+	return m, tea.Batch(cmds...)
 }
 
 func (m App) View() tea.View {

@@ -50,6 +50,7 @@ brews:
     homepage: https://github.com/shahadulhaider/restless
     description: Terminal-native HTTP client using .http files with TUI and headless CLI
     license: MIT
+    directory: Formula
     repository:
       owner: shahadulhaider
       name: homebrew-tap

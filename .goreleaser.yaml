@@ -45,4 +45,17 @@ changelog:
       - "^test:"
       - "^chore:"
 
+brews:
+  - name: restless
+    homepage: https://github.com/shahadulhaider/restless
+    description: Terminal-native HTTP client using .http files with TUI and headless CLI
+    license: MIT
+    repository:
+      owner: shahadulhaider
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    install: |
+      bin.install "restless"
+    test: |
+      system "#{bin}/restless", "version"
 

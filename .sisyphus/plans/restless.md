@@ -389,7 +389,7 @@ Max Concurrent: 4 (Waves 1, 3)
   - Message: `feat(model): add core types for request, response, environment`
   - Pre-commit: `go build ./internal/model/...`
 
-- [ ] 3. .http File Lexer
+- [x] 3. .http File Lexer
 
   **What to do**:
   - Create `internal/parser/lexer.go` — tokenize `.http` files into a token stream
@@ -479,7 +479,7 @@ Max Concurrent: 4 (Waves 1, 3)
   - Message: `feat(parser): add .http lexer and environment parser`
   - Pre-commit: `go test ./internal/parser/...`
 
-- [ ] 4. Environment Parser
+- [x] 4. Environment Parser
 
   **What to do**:
   - Create `internal/parser/envparser.go` — parse environment files

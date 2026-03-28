@@ -1,0 +1,12 @@
+### Get JSON
+GET {{base_url}}/json
+Accept: application/json
+
+###
+
+### Post data
+# @name create
+POST {{base_url}}/post
+Content-Type: application/json
+
+{"name": "test", "value": 42}

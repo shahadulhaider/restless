@@ -1,0 +1,12 @@
+### Login
+# @name login
+POST {{base_url}}/login
+Content-Type: application/json
+
+{"username": "testuser"}
+
+###
+
+### Get profile using token from login
+GET {{base_url}}/profile
+Authorization: Bearer {{login.response.body.token}}

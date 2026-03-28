@@ -159,7 +159,7 @@ type PostmanEnvironment struct {
 	} `json:"values"`
 }
 
-func ImportPostmanEnv(envPath string, outputPath string) error {
+func ImportPostmanEnv(envPath string, outputDir string) error {
 	data, err := os.ReadFile(envPath)
 	if err != nil {
 		return err
@@ -183,7 +183,10 @@ func ImportPostmanEnv(envPath string, outputPath string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(outputPath, out, 0644)
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(outputDir, "http-client.env.json"), out, 0644)
 }
 
 func ValidateHTTPFile(path string) error {

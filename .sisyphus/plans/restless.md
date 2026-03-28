@@ -206,7 +206,7 @@ Max Concurrent: 4 (Waves 1, 3)
 
 ## TODOs
 
-- [ ] 1. Project Scaffolding
+- [x] 1. Project Scaffolding
 
   **What to do**:
   - Initialize Go module: `go mod init github.com/shahadulhaider/restless`

@@ -280,7 +280,7 @@ Max Concurrent: 4 (Waves 1, 3)
   - Message: `chore(restless): init project scaffolding`
   - Pre-commit: `go build ./...`
 
-- [ ] 2. Core Types
+- [x] 2. Core Types
 
   **What to do**:
   - Create `internal/model/request.go`:

@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"image/color"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -14,7 +15,6 @@ import (
 	"github.com/shahadulhaider/restless/internal/parser"
 )
 
-// ItemType distinguishes tree node types.
 type ItemType int
 
 const (
@@ -23,7 +23,6 @@ const (
 	ItemTypeRequest
 )
 
-// BrowserItem is a flattened tree entry.
 type BrowserItem struct {
 	Type    ItemType
 	Depth   int
@@ -32,12 +31,10 @@ type BrowserItem struct {
 	Request *model.Request
 }
 
-// RequestSelected is sent when the user presses Enter on a request.
 type RequestSelected struct {
 	Request *model.Request
 }
 
-// BrowserModel is the left-pane collection tree.
 type BrowserModel struct {
 	collection *model.Collection
 	items      []BrowserItem
@@ -53,64 +50,26 @@ func NewBrowserModel() BrowserModel {
 	return BrowserModel{expanded: make(map[string]bool)}
 }
 
-// LoadCollection walks rootDir, parses .http files, and returns a Collection.
 func LoadCollection(rootDir string) (*model.Collection, error) {
 	c := &model.Collection{RootDir: rootDir}
 
-	// Collect all .http files
-	type fileEntry struct {
-		relDir  string
-		absPath string
-	}
-	var files []fileEntry
-
-	entries, err := filepath.Glob(filepath.Join(rootDir, "**/*.http"))
-	if err != nil {
-		return c, nil
-	}
-	// filepath.Glob doesn't recurse; use a manual walk
-	_ = entries
-
-	var walkFiles func(dir string) error
-	walkFiles = func(dir string) error {
-		dirEntries, err := filepath.Glob(filepath.Join(dir, "*.http"))
-		if err == nil {
-			for _, f := range dirEntries {
-				rel, _ := filepath.Rel(rootDir, filepath.Dir(f))
-				files = append(files, fileEntry{relDir: rel, absPath: f})
-			}
+	err := filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".http") {
+			return nil
 		}
-		subdirs, _ := filepath.Glob(filepath.Join(dir, "*"))
-		for _, sub := range subdirs {
-			// check if directory
-			if fi, err := filepath.EvalSymlinks(sub); err == nil {
-				_ = fi
-			}
+		reqs, parseErr := parser.ParseFile(path)
+		if parseErr != nil {
+			return nil
 		}
+		c.Files = append(c.Files, model.HTTPFile{Path: path, Requests: reqs})
 		return nil
-	}
-	if err := walkFiles(rootDir); err != nil {
-		return c, err
-	}
-
-	sort.Slice(files, func(i, j int) bool {
-		return files[i].absPath < files[j].absPath
 	})
 
-	seenDirs := map[string]bool{}
-	for _, f := range files {
-		dir := filepath.Dir(f.absPath)
-		rel, _ := filepath.Rel(rootDir, dir)
-		if !seenDirs[rel] {
-			seenDirs[rel] = true
-		}
-		reqs, err := parser.ParseFile(f.absPath)
-		if err != nil {
-			continue
-		}
-		c.Files = append(c.Files, model.HTTPFile{Path: f.absPath, Requests: reqs})
-	}
-	return c, nil
+	sort.Slice(c.Files, func(i, j int) bool {
+		return c.Files[i].Path < c.Files[j].Path
+	})
+
+	return c, err
 }
 
 func (m *BrowserModel) SetCollection(c *model.Collection) {
@@ -118,13 +77,11 @@ func (m *BrowserModel) SetCollection(c *model.Collection) {
 	m.items = m.buildItems()
 }
 
-// buildItems flattens the collection into a displayable list.
 func (m BrowserModel) buildItems() []BrowserItem {
 	if m.collection == nil {
 		return nil
 	}
 
-	// Group files by their directory relative to root
 	type dirGroup struct {
 		dir   string
 		files []model.HTTPFile
@@ -149,7 +106,6 @@ func (m BrowserModel) buildItems() []BrowserItem {
 	for _, dir := range order {
 		g := groups[dir]
 		if dir == "." {
-			// files in root, no dir entry
 			for _, f := range g.files {
 				items = append(items, BrowserItem{
 					Type:  ItemTypeFile,
@@ -171,7 +127,6 @@ func (m BrowserModel) buildItems() []BrowserItem {
 				}
 			}
 		} else {
-			// directory entry
 			icon := "▶"
 			if m.expanded[dir] {
 				icon = "▼"

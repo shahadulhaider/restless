@@ -1,13 +1,31 @@
+<div align="center">
+
 # restless
 
-A terminal-native HTTP client that uses `.http` files — the same format supported by JetBrains IDEs, VS Code REST Client, and IntelliJ IDEA. Store your API requests in plain text files, version them with Git, and run them from a full-featured TUI or headless CLI.
+**Your API workbench lives in the terminal.**
 
-## Installation
+Restless is a full-featured HTTP client that runs entirely in your terminal. It speaks `.http` files — the same plain-text format used by JetBrains IDEs and VS Code REST Client. No Electron. No cloud sync. No account required. Just your requests, version-controlled in Git, executable from a TUI or CI pipeline.
 
-**Go install**
-```bash
-go install github.com/shahadulhaider/restless/cmd/restless@latest
-```
+[![CI](https://github.com/shahadulhaider/restless/actions/workflows/ci.yml/badge.svg)](https://github.com/shahadulhaider/restless/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/shahadulhaider/restless)](https://goreportcard.com/report/github.com/shahadulhaider/restless)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+</div>
+
+---
+
+## Why restless?
+
+Most API tools want you to live inside their app. Restless takes the opposite approach:
+
+- **Plain text files** — `.http` files are readable, diffable, and belong in your repo
+- **Terminal native** — works over SSH, in tmux, on headless servers
+- **Zero lock-in** — your requests are JetBrains-compatible; switch tools anytime
+- **Fast** — starts instantly, no splash screens, no update prompts
+
+If you've ever wished Postman was a CLI tool that understood Git, this is it.
+
+## Install
 
 **Homebrew**
 ```bash
@@ -15,111 +33,262 @@ brew tap shahadulhaider/tap
 brew install restless
 ```
 
-**Binary download**
+**Go**
+```bash
+go install github.com/shahadulhaider/restless/cmd/restless@latest
+```
 
-Download the latest release for your platform from the [releases page](https://github.com/shahadulhaider/restless/releases).
+**Binary**
 
-## Quick Start
+Grab the latest from [Releases](https://github.com/shahadulhaider/restless/releases) — available for Linux, macOS, and Windows.
 
-Create a `.http` file:
+## 30-Second Demo
 
-```http
-# @name getUser
-GET https://api.example.com/users/1
+```bash
+# Create a request file
+cat > api.http << 'EOF'
+# @name health
+GET https://httpbin.org/get
 Accept: application/json
 
 ###
 
-# @name createPost
-POST https://api.example.com/posts
+# @name echo
+POST https://httpbin.org/post
 Content-Type: application/json
-Authorization: Bearer {{token}}
 
-{
-  "title": "Hello",
-  "body": "World"
-}
+{"message": "hello from restless"}
+EOF
+
+# Launch the TUI
+restless .
+
+# Or run headless
+restless run api.http
 ```
 
-Create an environment file `http-client.env.json`:
+## Features
+
+### Interactive TUI
+
+Browse your collection, send requests, inspect responses — all from the keyboard.
+
+- **Split-pane layout** — collection browser on the left, request/response detail on the right
+- **Fuzzy search** — press `/` to find any request by name, method, or URL
+- **Response tabs** — headers, body (with JSON pretty-printing), and timing waterfall
+- **Response history** — every response is saved; browse past responses with `h`, diff any two with `d`
+
+### Request CRUD
+
+Create, edit, and manage requests without leaving the terminal.
+
+- **Inline editor** — press `n` to create, `E` to edit. Full form with method selector, URL, headers, body, and metadata fields
+- **$EDITOR support** — press `ctrl+e` to open the `.http` file in your preferred editor (vim, nvim, code, etc.)
+- **Duplicate** — `Y` to clone a request
+- **Delete** — `D` with confirmation dialog
+
+### Collection Management
+
+Organize your requests into files and folders.
+
+- `N` — create a new `.http` file
+- `F` — create a new folder
+- `R` — rename a file or folder
+- `M` — move a file or folder
+- `D` — delete with confirmation
+
+### Environments
+
+Switch between dev, staging, and production with a single keystroke.
 
 ```json
+// http-client.env.json
 {
   "$shared": {
     "baseUrl": "https://api.example.com"
   },
   "dev": {
-    "token": "dev-secret-token"
+    "token": "dev-secret"
   },
   "prod": {
-    "token": "prod-secret-token"
+    "token": "prod-secret"
   }
 }
 ```
 
-Launch the TUI:
+Press `e` in the TUI to switch. Variables are expanded as `{{token}}` in your requests.
 
-```bash
-restless .
+### Request Chaining
+
+Pass data between requests using response references:
+
+```http
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email": "user@example.com", "password": "secret"}
+
+###
+
+# @name getProfile
+GET {{baseUrl}}/me
+Authorization: Bearer {{login.response.body.token}}
 ```
 
-Run headless:
+### Copy as curl
+
+Press `y` on any request to copy it as a `curl` command to your clipboard. Paste it into Slack, docs, or a shell.
+
+### Import From Anywhere
+
+Already have a collection? Bring it over:
 
 ```bash
-restless run requests.http --env dev
+restless import postman   collection.json     # Postman v2.1
+restless import insomnia  export.json          # Insomnia v4
+restless import bruno     ./my-collection/     # Bruno directory
+restless import curl      "curl -X POST ..."   # curl command
+restless import openapi   spec.yaml            # OpenAPI 3.x / Swagger 2.0
 ```
 
-## Features
+All importers produce standard `.http` files. Environments are converted to `http-client.env.json`.
 
-- **`.http` file format** — JetBrains-compatible request syntax
-- **Interactive TUI** — browse, search, and send requests from the terminal
-- **Environment management** — switch between dev/staging/prod with `e`
-- **Request chaining** — use `{{requestName.response.body.path}}` to pass data between requests
-- **Response history** — every response is saved; browse and diff with `h`
-- **Cookie jar** — cookies persist per environment automatically
-- **Postman import** — convert existing Postman collections with `restless import postman`
-- **File bodies** — reference external files with `< ./body.json`
-- **Git-friendly** — plain text files, no proprietary format
+### Headless Runner
 
-## Keyboard Shortcuts
+Run requests in CI/CD pipelines or scripts:
+
+```bash
+# Run all requests in a file
+restless run api.http --env production
+
+# Fail fast on first error
+restless run api.http --env staging --fail-fast
+```
+
+### Cookie Jar
+
+Cookies persist automatically per environment. Login once, and subsequent requests carry the session — just like a browser.
+
+### Detailed Timing
+
+Every response includes a timing waterfall: DNS, TCP connect, TLS handshake, time-to-first-byte, and body transfer. See exactly where your latency comes from.
+
+## Keyboard Reference
+
+### Global
 
 | Key | Action |
 |-----|--------|
-| `↑`/`↓` or `j`/`k` | Navigate request list |
-| `Enter` | Select request |
-| `r` | Send request |
+| `Tab` | Switch between browser and detail panes |
+| `/` | Fuzzy search requests |
 | `e` | Switch environment |
-| `/` | Search requests |
+| `n` | Create new request |
+| `E` | Edit selected request |
+| `D` | Delete (with confirmation) |
+| `Y` | Duplicate request |
+| `y` | Copy request as curl |
+| `ctrl+e` | Open file in `$EDITOR` |
+| `q` / `ctrl+c` | Quit |
+
+### Browser Pane
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` / `↑` / `↓` | Navigate |
+| `Enter` | Select / expand |
+| `N` | New `.http` file |
+| `F` | New folder |
+| `R` | Rename |
+| `M` | Move |
+
+### Detail Pane
+
+| Key | Action |
+|-----|--------|
+| `Enter` / `ctrl+r` | Send request |
+| `1` / `2` / `3` | Switch tabs (Headers / Body / Timing) |
 | `h` | Toggle response history |
 | `d` | Diff two history entries |
-| `tab` | Switch between panes |
-| `q` | Quit |
+| `j` / `k` | Scroll response |
+
+### Editor Overlay
+
+| Key | Action |
+|-----|--------|
+| `Tab` / `Shift+Tab` | Navigate fields |
+| `←` / `→` | Cycle method (on method field) |
+| `Enter` | Edit value / add header row |
+| `ctrl+d` | Delete header row |
+| `ctrl+s` | Save |
+| `Esc` | Cancel |
 
 ## CLI Reference
 
 ```
-restless [directory]                          Launch TUI for directory
-restless run <file.http> [--env <name>]       Run all requests headlessly
-restless import postman <file> [--output dir] Import Postman collection
-restless version                              Print version
+restless [directory]                               Launch TUI
+restless run <file.http> [--env name] [--fail-fast] Run requests headlessly
+restless import postman  <file> [--output dir]      Import Postman collection
+restless import insomnia <file> [--output dir]      Import Insomnia export
+restless import bruno    <dir>  [--output dir]      Import Bruno collection
+restless import curl     <cmd>  [--output dir]      Import curl command
+restless import openapi  <spec> [--output dir]      Import OpenAPI/Swagger spec
+restless version                                    Print version
 ```
 
-## `.http` Format
+## `.http` File Format
 
 ```http
 # @name requestName
-METHOD https://url
-Header-Name: {{variable}}
-
-request body (optional)
+# @no-redirect
+# @timeout 30
+GET https://api.example.com/users/{{userId}} HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
 
 ###
 
-# next request
+# @name createUser
+POST https://api.example.com/users
+Content-Type: application/json
+
+{
+  "name": "Alice",
+  "email": "alice@example.com"
+}
+
+###
+
+# File body reference
+PUT https://api.example.com/config
+Content-Type: application/json
+
+< ./payload.json
 ```
 
-Full spec: [JetBrains HTTP Client documentation](https://www.jetbrains.com/help/idea/http-client-in-product-code-editor.html)
+### Metadata Tags
+
+| Tag | Effect |
+|-----|--------|
+| `# @name <name>` | Name the request (used in chaining and display) |
+| `# @no-redirect` | Don't follow redirects |
+| `# @no-cookie-jar` | Don't send/store cookies |
+| `# @timeout <seconds>` | Request timeout |
+| `# @connection-timeout <seconds>` | Connection timeout |
+
+Compatible with [JetBrains HTTP Client](https://www.jetbrains.com/help/idea/http-client-in-product-code-editor.html) and [VS Code REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client).
+
+## Contributing
+
+Contributions welcome. Please open an issue first for non-trivial changes.
+
+```bash
+git clone https://github.com/shahadulhaider/restless.git
+cd restless
+go build ./cmd/restless
+go test ./...
+```
 
 ## License
 
-MIT
+[MIT](LICENSE) — Shahadul Haider

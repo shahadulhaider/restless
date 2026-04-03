@@ -80,7 +80,95 @@ func importCmd() *cobra.Command {
 	postman.Flags().StringVar(&envFile, "env", "", "Postman environment JSON file")
 	postman.Flags().StringVar(&outputDir, "output", ".", "Output directory")
 
-	cmd.AddCommand(postman)
+	insomnia := &cobra.Command{
+		Use:   "insomnia <export.json>",
+		Short: "Import an Insomnia v4 collection",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out := outputDir
+			if out == "" {
+				out = "."
+			}
+			abs, err := filepath.Abs(out)
+			if err != nil {
+				return fmt.Errorf("resolving output dir: %w", err)
+			}
+			if err := importer.ImportInsomnia(args[0], importer.ImportOptions{OutputDir: abs}); err != nil {
+				return fmt.Errorf("importing collection: %w", err)
+			}
+			fmt.Fprintf(os.Stdout, "Imported to %s\n", abs)
+			return nil
+		},
+	}
+	insomnia.Flags().StringVar(&outputDir, "output", ".", "Output directory")
+
+	bruno := &cobra.Command{
+		Use:   "bruno <collection-dir>",
+		Short: "Import a Bruno collection directory",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out := outputDir
+			if out == "" {
+				out = "."
+			}
+			abs, err := filepath.Abs(out)
+			if err != nil {
+				return fmt.Errorf("resolving output dir: %w", err)
+			}
+			if err := importer.ImportBruno(args[0], importer.ImportOptions{OutputDir: abs}); err != nil {
+				return fmt.Errorf("importing collection: %w", err)
+			}
+			fmt.Fprintf(os.Stdout, "Imported to %s\n", abs)
+			return nil
+		},
+	}
+	bruno.Flags().StringVar(&outputDir, "output", ".", "Output directory")
+
+	curlCmd := &cobra.Command{
+		Use:   "curl <command>",
+		Short: "Import a curl command as a .http request",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out := outputDir
+			if out == "" {
+				out = "."
+			}
+			abs, err := filepath.Abs(out)
+			if err != nil {
+				return fmt.Errorf("resolving output dir: %w", err)
+			}
+			if err := importer.ImportCurl(args[0], importer.ImportOptions{OutputDir: abs}); err != nil {
+				return fmt.Errorf("importing curl command: %w", err)
+			}
+			fmt.Fprintf(os.Stdout, "Imported to %s\n", abs)
+			return nil
+		},
+	}
+	curlCmd.Flags().StringVar(&outputDir, "output", ".", "Output directory")
+
+	openapi := &cobra.Command{
+		Use:   "openapi <spec.json|spec.yaml>",
+		Short: "Import an OpenAPI 3.x or Swagger 2.0 spec",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out := outputDir
+			if out == "" {
+				out = "."
+			}
+			abs, err := filepath.Abs(out)
+			if err != nil {
+				return fmt.Errorf("resolving output dir: %w", err)
+			}
+			if err := importer.ImportOpenAPI(args[0], importer.ImportOptions{OutputDir: abs}); err != nil {
+				return fmt.Errorf("importing spec: %w", err)
+			}
+			fmt.Fprintf(os.Stdout, "Imported to %s\n", abs)
+			return nil
+		},
+	}
+	openapi.Flags().StringVar(&outputDir, "output", ".", "Output directory")
+
+	cmd.AddCommand(postman, insomnia, bruno, curlCmd, openapi)
 	return cmd
 }
 

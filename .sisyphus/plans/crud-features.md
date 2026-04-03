@@ -633,7 +633,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
   - Files: `internal/importer/openapi.go`, `internal/importer/openapi_test.go`
   - Pre-commit: `go test ./internal/importer/...`
 
-- [ ] 7. File-Level Request CRUD Operations
+- [x] 7. File-Level Request CRUD Operations
 
   **What to do**:
   - Create `internal/writer/fileops.go` with functions:
@@ -711,7 +711,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
   - Files: `internal/writer/fileops.go`, `internal/writer/fileops_test.go`
   - Pre-commit: `go test ./internal/writer/...`
 
-- [ ] 8. TUI Request Editor Form Component
+- [x] 8. TUI Request Editor Form Component
 
   **What to do**:
   - Create `internal/tui/editor.go` with `EditorModel` bubbletea component
@@ -804,7 +804,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
   - Message: `feat(tui): add request editor form component`
   - Files: `internal/tui/editor.go`
 
-- [ ] 9. TUI Confirmation Dialog Component
+- [x] 9. TUI Confirmation Dialog Component
 
   **What to do**:
   - Create `internal/tui/confirm.go` with `ConfirmModel` bubbletea component
@@ -860,7 +860,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
   - Message: `feat(tui): add confirmation dialog component`
   - Files: `internal/tui/confirm.go`
 
-- [ ] 10. Import CLI Commands
+- [x] 10. Import CLI Commands
 
   **What to do**:
   - Update `cmd/restless/main.go` to add 3 new subcommands under `import`:

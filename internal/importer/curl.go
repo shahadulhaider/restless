@@ -2,10 +2,13 @@ package importer
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"unicode"
 
 	"github.com/shahadulhaider/restless/internal/model"
+	"github.com/shahadulhaider/restless/internal/writer"
 )
 
 // ParseCurlCommand parses a curl command string and returns a model.Request.
@@ -131,6 +134,23 @@ func ParseCurlCommand(cmd string) (*model.Request, error) {
 	}
 
 	return req, nil
+}
+
+// ImportCurl parses a curl command string and writes a .http file to opts.OutputDir.
+func ImportCurl(cmd string, opts ImportOptions) error {
+	req, err := ParseCurlCommand(cmd)
+	if err != nil {
+		return fmt.Errorf("parse curl: %w", err)
+	}
+	outDir := opts.OutputDir
+	if outDir == "" {
+		outDir = "."
+	}
+	if err := os.MkdirAll(outDir, 0755); err != nil {
+		return err
+	}
+	outPath := filepath.Join(outDir, "imported.http")
+	return writer.InsertRequest(outPath, *req)
 }
 
 // GenerateCurl produces a curl command string from a model.Request.

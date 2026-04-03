@@ -75,8 +75,9 @@ Browse your collection, send requests, inspect responses — all from the keyboa
 
 - **Split-pane layout** — collection browser on the left, request/response detail on the right
 - **Fuzzy search** — press `/` to find any request by name, method, or URL
-- **Response tabs** — headers, body (with JSON pretty-printing), and timing waterfall
+- **Response viewer** — JSON pretty-printing with colors, XML/HTML indentation, line numbers, word wrap, search with match highlighting, page-up/down scrolling
 - **Response history** — every response is saved; browse past responses with `h`, diff any two with `d`
+- **Timing waterfall** — color-coded DNS, TCP, TLS, TTFB, and body transfer breakdown
 
 ### Request CRUD
 
@@ -208,9 +209,15 @@ Every response includes a timing waterfall: DNS, TCP connect, TLS handshake, tim
 |-----|--------|
 | `Enter` / `ctrl+r` | Send request |
 | `1` / `2` / `3` | Switch tabs (Headers / Body / Timing) |
+| `j` / `k` | Scroll line by line |
+| `ctrl+d` / `ctrl+u` | Scroll half page down / up |
+| `g` / `G` | Jump to top / bottom |
+| `f` | Search within response body |
+| `n` / `N` | Next / previous search match |
+| `w` | Toggle word wrap |
+| `l` | Toggle line numbers |
 | `h` | Toggle response history |
 | `d` | Diff two history entries |
-| `j` / `k` | Scroll response |
 
 ### Editor Overlay
 

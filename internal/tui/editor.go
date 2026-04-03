@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -21,7 +20,6 @@ type EditorSaved struct {
 // EditorCancelled is emitted when the user cancels the editor form.
 type EditorCancelled struct{}
 
-// editorMode distinguishes create vs edit.
 type editorMode int
 
 const (
@@ -29,73 +27,69 @@ const (
 	editorModeEdit
 )
 
-// focusedField identifies which form field has focus.
 type focusedField int
 
 const (
 	fieldName focusedField = iota
 	fieldMethod
 	fieldURL
-	fieldHeaderKey  // header sub-focus: key column of current row
-	fieldHeaderValue // header sub-focus: value column of current row
+	fieldHeaderKey
+	fieldHeaderValue
 	fieldBody
 	fieldNoRedirect
 	fieldNoCookieJar
 	fieldTimeout
-	fieldCount // sentinel
+	fieldCount
 )
 
 var httpMethods = []string{"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}
 
-// headerRow is a mutable key-value pair for the headers list.
 type headerRow struct {
-	key   string
-	value string
+	key   lineEdit
+	value lineEdit
 }
 
-// EditorModel is a full-screen form for creating or editing a model.Request.
+// EditorModel is a form for creating or editing a model.Request.
 type EditorModel struct {
 	mode   editorMode
 	focus  focusedField
 	width  int
 	height int
 
-	// Field values
-	name         string
-	methodIdx    int // index into httpMethods
-	url          string
+	name         lineEdit
+	methodIdx    int
+	url          lineEdit
 	headers      []headerRow
-	headerCursor int // which header row is active
-	headerOnKey  bool // true = cursor on key, false = on value
-	body         []string // lines
-	bodyCursor   int // active line in body
+	headerCursor int
+	headerOnKey  bool
+	body         []lineEdit // one lineEdit per body line
+	bodyCursor   int
 	noRedirect   bool
 	noCookieJar  bool
-	timeoutSecs  string
+	timeoutSecs  lineEdit
 }
 
-// NewEditorModel creates an empty editor in Create mode.
 func NewEditorModel() EditorModel {
 	return EditorModel{
 		mode:    editorModeCreate,
 		focus:   fieldName,
-		headers: []headerRow{{}}, // start with one empty row
-		body:    []string{""},
+		name:    newLineEdit(""),
+		url:     newLineEdit(""),
+		headers: []headerRow{{key: newLineEdit(""), value: newLineEdit("")}},
+		body:    []lineEdit{newLineEdit("")},
 	}
 }
 
-// NewEditorModelFromRequest creates an editor pre-populated from req (Edit mode).
 func NewEditorModelFromRequest(req model.Request) EditorModel {
 	m := EditorModel{
 		mode:        editorModeEdit,
 		focus:       fieldName,
-		name:        req.Name,
-		url:         req.URL,
+		name:        newLineEdit(req.Name),
+		url:         newLineEdit(req.URL),
 		noRedirect:  req.Metadata.NoRedirect,
 		noCookieJar: req.Metadata.NoCookieJar,
 		headerOnKey: true,
 	}
-	// Method
 	m.methodIdx = 0
 	for i, meth := range httpMethods {
 		if meth == req.Method {
@@ -103,46 +97,48 @@ func NewEditorModelFromRequest(req model.Request) EditorModel {
 			break
 		}
 	}
-	// Headers
 	if len(req.Headers) > 0 {
 		for _, h := range req.Headers {
-			m.headers = append(m.headers, headerRow{key: h.Key, value: h.Value})
+			m.headers = append(m.headers, headerRow{key: newLineEdit(h.Key), value: newLineEdit(h.Value)})
 		}
 	} else {
-		m.headers = []headerRow{{}}
+		m.headers = []headerRow{{key: newLineEdit(""), value: newLineEdit("")}}
 	}
-	// Body
 	if req.Body != "" {
-		m.body = strings.Split(req.Body, "\n")
+		lines := strings.Split(req.Body, "\n")
+		for _, l := range lines {
+			m.body = append(m.body, newLineEdit(l))
+		}
 	} else {
-		m.body = []string{""}
+		m.body = []lineEdit{newLineEdit("")}
 	}
-	// Timeout
 	if req.Metadata.Timeout > 0 {
-		m.timeoutSecs = strconv.Itoa(int(req.Metadata.Timeout.Seconds()))
+		m.timeoutSecs = newLineEdit(strconv.Itoa(int(req.Metadata.Timeout.Seconds())))
 	}
 	return m
 }
 
-// Request returns the model.Request represented by the current form state.
 func (m EditorModel) Request() model.Request {
 	req := model.Request{
-		Name:   strings.TrimSpace(m.name),
+		Name:   strings.TrimSpace(m.name.String()),
 		Method: httpMethods[m.methodIdx],
-		URL:    strings.TrimSpace(m.url),
+		URL:    strings.TrimSpace(m.url.String()),
 	}
 	for _, h := range m.headers {
-		k := strings.TrimSpace(h.key)
-		v := strings.TrimSpace(h.value)
+		k := strings.TrimSpace(h.key.String())
+		v := strings.TrimSpace(h.value.String())
 		if k != "" {
 			req.Headers = append(req.Headers, model.Header{Key: k, Value: v})
 		}
 	}
-	bodyStr := strings.Join(m.body, "\n")
-	req.Body = strings.TrimRight(bodyStr, "\n")
+	var bodyLines []string
+	for _, l := range m.body {
+		bodyLines = append(bodyLines, l.String())
+	}
+	req.Body = strings.TrimRight(strings.Join(bodyLines, "\n"), "\n")
 	req.Metadata.NoRedirect = m.noRedirect
 	req.Metadata.NoCookieJar = m.noCookieJar
-	if secs, err := strconv.Atoi(strings.TrimSpace(m.timeoutSecs)); err == nil && secs > 0 {
+	if secs, err := strconv.Atoi(strings.TrimSpace(m.timeoutSecs.String())); err == nil && secs > 0 {
 		req.Metadata.Timeout = time.Duration(secs) * time.Second
 	}
 	return req
@@ -159,7 +155,6 @@ func (m EditorModel) Update(msg tea.Msg) (EditorModel, tea.Cmd) {
 	case tea.KeyPressMsg:
 		key := msg.String()
 
-		// Global shortcuts
 		switch key {
 		case "ctrl+s":
 			req := m.Request()
@@ -174,13 +169,12 @@ func (m EditorModel) Update(msg tea.Msg) (EditorModel, tea.Cmd) {
 			return m, nil
 		}
 
-		// Field-specific handling
 		switch m.focus {
 		case fieldMethod:
 			switch key {
-			case "left", "h":
+			case "left":
 				m.methodIdx = (m.methodIdx - 1 + len(httpMethods)) % len(httpMethods)
-			case "right", "l":
+			case "right":
 				m.methodIdx = (m.methodIdx + 1) % len(httpMethods)
 			}
 		case fieldNoRedirect:
@@ -192,11 +186,11 @@ func (m EditorModel) Update(msg tea.Msg) (EditorModel, tea.Cmd) {
 				m.noCookieJar = !m.noCookieJar
 			}
 		case fieldName:
-			m.name = editText(m.name, key)
+			m.name.HandleKey(key)
 		case fieldURL:
-			m.url = editText(m.url, key)
+			m.url.HandleKey(key)
 		case fieldTimeout:
-			m.timeoutSecs = editTextFiltered(m.timeoutSecs, key, isDigit)
+			m.timeoutSecs.HandleKeyFiltered(key, isDigit)
 		case fieldHeaderKey:
 			m = m.handleHeaderKey(key)
 		case fieldHeaderValue:
@@ -210,11 +204,11 @@ func (m EditorModel) Update(msg tea.Msg) (EditorModel, tea.Cmd) {
 
 func (m EditorModel) handleHeaderKey(key string) EditorModel {
 	switch key {
-	case "up", "k":
+	case "up":
 		if m.headerCursor > 0 {
 			m.headerCursor--
 		}
-	case "down", "j":
+	case "down":
 		if m.headerCursor < len(m.headers)-1 {
 			m.headerCursor++
 		}
@@ -225,14 +219,13 @@ func (m EditorModel) handleHeaderKey(key string) EditorModel {
 				m.headerCursor = len(m.headers) - 1
 			}
 		} else {
-			m.headers[0] = headerRow{}
+			m.headers[0] = headerRow{key: newLineEdit(""), value: newLineEdit("")}
 		}
 	case "enter":
-		// Move to value column
 		m.focus = fieldHeaderValue
 		m.headerOnKey = false
 	default:
-		m.headers[m.headerCursor].key = editText(m.headers[m.headerCursor].key, key)
+		m.headers[m.headerCursor].key.HandleKey(key)
 	}
 	return m
 }
@@ -240,12 +233,11 @@ func (m EditorModel) handleHeaderKey(key string) EditorModel {
 func (m EditorModel) handleHeaderValue(key string) EditorModel {
 	switch key {
 	case "enter":
-		// Add a new empty row and move to its key
-		m.headers = append(m.headers, headerRow{})
+		m.headers = append(m.headers, headerRow{key: newLineEdit(""), value: newLineEdit("")})
 		m.headerCursor = len(m.headers) - 1
 		m.focus = fieldHeaderKey
 		m.headerOnKey = true
-	case "up", "k":
+	case "up":
 		if m.headerCursor > 0 {
 			m.headerCursor--
 			m.focus = fieldHeaderKey
@@ -258,12 +250,12 @@ func (m EditorModel) handleHeaderValue(key string) EditorModel {
 				m.headerCursor = len(m.headers) - 1
 			}
 		} else {
-			m.headers[0] = headerRow{}
+			m.headers[0] = headerRow{key: newLineEdit(""), value: newLineEdit("")}
 		}
 		m.focus = fieldHeaderKey
 		m.headerOnKey = true
 	default:
-		m.headers[m.headerCursor].value = editText(m.headers[m.headerCursor].value, key)
+		m.headers[m.headerCursor].value.HandleKey(key)
 	}
 	return m
 }
@@ -273,42 +265,45 @@ func (m EditorModel) handleBody(key string) EditorModel {
 	case "up":
 		if m.bodyCursor > 0 {
 			m.bodyCursor--
+			// Clamp cursor position to new line length
+			if m.body[m.bodyCursor].pos > m.body[m.bodyCursor].Len() {
+				m.body[m.bodyCursor].pos = m.body[m.bodyCursor].Len()
+			}
 		}
 	case "down":
 		if m.bodyCursor < len(m.body)-1 {
 			m.bodyCursor++
+			if m.body[m.bodyCursor].pos > m.body[m.bodyCursor].Len() {
+				m.body[m.bodyCursor].pos = m.body[m.bodyCursor].Len()
+			}
 		}
 	case "enter":
+		// Split current line at cursor position
+		cur := &m.body[m.bodyCursor]
+		after := string(cur.text[cur.pos:])
+		cur.text = cur.text[:cur.pos]
 		// Insert new line after current
-		newLines := make([]string, len(m.body)+1)
-		copy(newLines, m.body[:m.bodyCursor+1])
-		newLines[m.bodyCursor+1] = ""
-		copy(newLines[m.bodyCursor+2:], m.body[m.bodyCursor+1:])
-		m.body = newLines
+		newLine := newLineEdit(after)
+		newLine.pos = 0
+		m.body = append(m.body, lineEdit{})
+		copy(m.body[m.bodyCursor+2:], m.body[m.bodyCursor+1:])
+		m.body[m.bodyCursor+1] = newLine
 		m.bodyCursor++
 	case "backspace":
-		if len(m.body[m.bodyCursor]) > 0 {
-			_, size := utf8.DecodeLastRuneInString(m.body[m.bodyCursor])
-			m.body[m.bodyCursor] = m.body[m.bodyCursor][:len(m.body[m.bodyCursor])-size]
+		cur := &m.body[m.bodyCursor]
+		if cur.pos > 0 {
+			cur.Backspace()
 		} else if m.bodyCursor > 0 {
 			// Merge with previous line
-			m.body[m.bodyCursor-1] += m.body[m.bodyCursor]
+			prev := &m.body[m.bodyCursor-1]
+			joinPos := prev.Len()
+			prev.text = append(prev.text, cur.text...)
+			prev.pos = joinPos
 			m.body = append(m.body[:m.bodyCursor], m.body[m.bodyCursor+1:]...)
 			m.bodyCursor--
 		}
-	case "ctrl+u":
-		// Clear current line
-		m.body[m.bodyCursor] = ""
-	case "ctrl+w":
-		// Delete word backward on current line
-		m.body[m.bodyCursor] = deleteWordBackward(m.body[m.bodyCursor])
-	case "ctrl+k":
-		// Kill to end of line (since cursor is at end, clear line)
-		m.body[m.bodyCursor] = ""
 	default:
-		if len(key) == 1 || (len(key) > 1 && !strings.HasPrefix(key, "ctrl") && !strings.HasPrefix(key, "alt")) {
-			m.body[m.bodyCursor] += key
-		}
+		m.body[m.bodyCursor].HandleKey(key)
 	}
 	return m
 }
@@ -352,6 +347,8 @@ func (m EditorModel) focusPrev() EditorModel {
 	return m
 }
 
+// --- View ---
+
 func (m EditorModel) View() string {
 	var sb strings.Builder
 
@@ -362,33 +359,29 @@ func (m EditorModel) View() string {
 	sb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#CDD6F4")).Render(title))
 	sb.WriteString("\n\n")
 
-	sb.WriteString(m.renderTextField("Name", m.name, m.focus == fieldName))
+	sb.WriteString(m.renderLineEditField("Name", &m.name, m.focus == fieldName))
 	sb.WriteString(m.renderMethodField())
-	sb.WriteString(m.renderTextField("URL", m.url, m.focus == fieldURL))
+	sb.WriteString(m.renderLineEditField("URL", &m.url, m.focus == fieldURL))
 	sb.WriteString(m.renderHeadersField())
 	sb.WriteString(m.renderBodyField())
 	sb.WriteString(m.renderToggleField("@no-redirect", m.noRedirect, m.focus == fieldNoRedirect))
 	sb.WriteString(m.renderToggleField("@no-cookie-jar", m.noCookieJar, m.focus == fieldNoCookieJar))
-	sb.WriteString(m.renderTextField("@timeout (seconds)", m.timeoutSecs, m.focus == fieldTimeout))
+	sb.WriteString(m.renderLineEditField("@timeout (sec)", &m.timeoutSecs, m.focus == fieldTimeout))
 
 	sb.WriteString("\n")
-	sb.WriteString(dimStyle.Render("Tab/Shift+Tab: navigate  Ctrl+S: save  Esc: cancel  Ctrl+W: del word  Ctrl+U: clear"))
+	sb.WriteString(dimStyle.Render("Tab: next  Ctrl+S: save  Esc: cancel  ←/→: move  Ctrl+A/E: home/end  Ctrl+W: del word  Ctrl+U: clear"))
 
 	return sb.String()
 }
 
-func (m EditorModel) renderTextField(label, value string, focused bool) string {
+func (m EditorModel) renderLineEditField(label string, le *lineEdit, focused bool) string {
 	indicator := "  "
 	labelStyle := dimStyle
 	if focused {
 		indicator = "> "
 		labelStyle = lipgloss.NewStyle().Foreground(colorBorderActive)
 	}
-	cursor := ""
-	if focused {
-		cursor = "█"
-	}
-	return fmt.Sprintf("%s%s: %s%s\n", indicator, labelStyle.Render(label), value, cursor)
+	return fmt.Sprintf("%s%s: %s\n", indicator, labelStyle.Render(label), le.View(focused))
 }
 
 func (m EditorModel) renderMethodField() string {
@@ -420,22 +413,16 @@ func (m EditorModel) renderHeadersField() string {
 
 	for i, h := range m.headers {
 		isActive := headerFocused && i == m.headerCursor
-		keyCursor := ""
-		valCursor := ""
 		rowIndicator := "    "
 		if isActive {
-			rowIndicator = "  ● "
-			if m.focus == fieldHeaderKey {
-				keyCursor = "█"
-			} else {
-				valCursor = "█"
-			}
+			rowIndicator = "  > "
 		}
-		line := fmt.Sprintf("%s%s%s: %s%s\n", rowIndicator, h.key, keyCursor, h.value, valCursor)
-		sb.WriteString(line)
+		keyView := h.key.View(isActive && m.focus == fieldHeaderKey)
+		valView := h.value.View(isActive && m.focus == fieldHeaderValue)
+		sb.WriteString(fmt.Sprintf("%s%s: %s\n", rowIndicator, keyView, valView))
 	}
 	if headerFocused {
-		sb.WriteString(dimStyle.Render("    Enter: edit value / add row  Ctrl+D: delete row") + "\n")
+		sb.WriteString(dimStyle.Render("    Enter: value/add row  Ctrl+D: del row  ↑/↓: rows") + "\n")
 	}
 	return sb.String()
 }
@@ -450,12 +437,9 @@ func (m EditorModel) renderBodyField() string {
 	}
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("%s%s:\n", indicator, labelStyle.Render("Body")))
-	for i, line := range m.body {
-		cursor := ""
-		if focused && i == m.bodyCursor {
-			cursor = "█"
-		}
-		sb.WriteString(fmt.Sprintf("    %s%s\n", line, cursor))
+	for i := range m.body {
+		isCurrent := focused && i == m.bodyCursor
+		sb.WriteString(fmt.Sprintf("    %s\n", m.body[i].View(isCurrent)))
 	}
 	return sb.String()
 }
@@ -472,77 +456,6 @@ func (m EditorModel) renderToggleField(label string, value, focused bool) string
 		check = "[x]"
 	}
 	return fmt.Sprintf("%s%s %s\n", indicator, labelStyle.Render(label), check)
-}
-
-// editText handles single-line text editing with readline-style shortcuts:
-//   - ctrl+a: jump to start
-//   - ctrl+e: jump to end (returns field as-is since cursor is always at end)
-//   - ctrl+u: clear entire field
-//   - ctrl+k: clear from cursor to end (same as ctrl+u with end-cursor)
-//   - ctrl+w: delete word backward
-//   - backspace: delete char backward
-func editText(s, key string) string {
-	switch key {
-	case "backspace":
-		if len(s) == 0 {
-			return s
-		}
-		_, size := utf8.DecodeLastRuneInString(s)
-		return s[:len(s)-size]
-	case "ctrl+u", "ctrl+k":
-		return ""
-	case "ctrl+w":
-		return deleteWordBackward(s)
-	case "ctrl+a", "ctrl+e":
-		// Cursor is always at end in this simple model, so these are no-ops
-		return s
-	default:
-		r := []rune(key)
-		if len(r) == 1 {
-			return s + key
-		}
-		return s
-	}
-}
-
-// editTextFiltered is like editText but only allows characters matching filter.
-func editTextFiltered(s, key string, filter func(rune) bool) string {
-	switch key {
-	case "backspace":
-		if len(s) == 0 {
-			return s
-		}
-		_, size := utf8.DecodeLastRuneInString(s)
-		return s[:len(s)-size]
-	case "ctrl+u", "ctrl+k":
-		return ""
-	case "ctrl+w":
-		return deleteWordBackward(s)
-	default:
-		r := []rune(key)
-		if len(r) == 1 && filter(r[0]) {
-			return s + key
-		}
-		return s
-	}
-}
-
-// deleteWordBackward removes the last word (like ctrl+w in bash).
-func deleteWordBackward(s string) string {
-	if s == "" {
-		return s
-	}
-	runes := []rune(s)
-	i := len(runes) - 1
-	// Skip trailing spaces
-	for i >= 0 && runes[i] == ' ' {
-		i--
-	}
-	// Delete until next space or start
-	for i >= 0 && runes[i] != ' ' {
-		i--
-	}
-	return string(runes[:i+1])
 }
 
 func isDigit(r rune) bool {

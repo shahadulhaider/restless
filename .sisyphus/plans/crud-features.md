@@ -1255,7 +1255,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
   - Message: `feat(tui): wire curl export with keybinding`
   - Files: `internal/tui/detail.go`, `internal/tui/app.go`
 
-- [ ] 16. Update Status Bar, Keybindings, and Help Text
+- [x] 16. Update Status Bar, Keybindings, and Help Text
 
   **What to do**:
   - Update status bar in `internal/tui/app.go` to show new keybindings contextually:
@@ -1310,7 +1310,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
   - Message: `feat(tui): update status bar and keybindings`
   - Files: `internal/tui/app.go`, `internal/tui/styles.go`, `README.md`
 
-- [ ] 17. Integration Tests
+- [x] 17. Integration Tests
 
   **What to do**:
   - Add integration tests in `tests/integration_test.go` covering:

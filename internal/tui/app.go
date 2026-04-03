@@ -437,7 +437,20 @@ func (m App) View() tea.View {
 	}
 	statusLine := m.statusText
 	if statusLine == "" {
-		statusLine = fmt.Sprintf(" env: %s │ n: new │ E: edit │ D: del │ Y: dup │ ctrl+e: $EDITOR │ y: copy curl │ q: quit", envLabel)
+		switch {
+		case m.showEditor:
+			statusLine = " Ctrl+S: save │ Esc: cancel │ Tab: next field │ Shift+Tab: prev field"
+		case m.showConfirm:
+			statusLine = " ←/→: select │ Enter: confirm │ y/n: shortcut"
+		case m.showPrompt:
+			statusLine = " Enter: confirm │ Esc: cancel"
+		case m.focus == PaneBrowser:
+			statusLine = fmt.Sprintf(" env:%s │ n:new req │ E:edit │ D:del │ Y:dup │ N:new file │ F:folder │ R:rename │ M:move │ ctrl+e:$EDITOR │ q:quit", envLabel)
+		case m.focus == PaneDetail:
+			statusLine = " Enter:send │ y:copy curl │ h:history │ 1-3:tabs │ n:new req │ E:edit │ q:quit"
+		default:
+			statusLine = fmt.Sprintf(" env:%s │ tab:switch panes │ /:search │ e:env │ q:quit", envLabel)
+		}
 	}
 	statusBar := statusBarStyle.Width(m.width).Render(statusLine)
 

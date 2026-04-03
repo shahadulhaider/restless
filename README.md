@@ -117,7 +117,7 @@ Switch between dev, staging, and production with a single keystroke.
 }
 ```
 
-Press `e` in the TUI to switch. Variables are expanded as `{{token}}` in your requests.
+Press `ctrl+e` in the TUI to switch. Variables are expanded as `{{token}}` in your requests.
 
 ### Request Chaining
 
@@ -183,13 +183,13 @@ Every response includes a timing waterfall: DNS, TCP connect, TLS handshake, tim
 |-----|--------|
 | `Tab` | Switch between browser and detail panes |
 | `/` | Fuzzy search requests |
-| `e` | Switch environment |
+| `ctrl+e` | Switch environment |
 | `n` | Create new request |
-| `E` | Edit selected request |
+| `e` | Edit in `$EDITOR` (falls back to internal editor) |
+| `E` | Edit in internal form editor |
 | `D` | Delete (with confirmation) |
 | `Y` | Duplicate request |
 | `y` | Copy request as curl |
-| `ctrl+e` | Open file in `$EDITOR` |
 | `q` / `ctrl+c` | Quit |
 
 ### Browser Pane
@@ -227,6 +227,8 @@ Every response includes a timing waterfall: DNS, TCP connect, TLS handshake, tim
 | `←` / `→` | Cycle method (on method field) |
 | `Enter` | Edit value / add header row |
 | `ctrl+d` | Delete header row |
+| `ctrl+w` | Delete word backward |
+| `ctrl+u` | Clear field |
 | `ctrl+s` | Save |
 | `Esc` | Cancel |
 

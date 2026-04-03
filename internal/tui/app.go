@@ -303,7 +303,8 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "/":
 			m.showSearch = true
 			return m, nil
-		case "e":
+		case "ctrl+e":
+			// Environment switch (was: e)
 			m.showEnvSwitch = true
 			return m, nil
 		case "n":
@@ -312,8 +313,28 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.editingReq = nil
 			m.showEditor = true
 			return m, nil
+		case "e":
+			// Edit with $EDITOR — fallback to internal editor if $EDITOR is not set
+			if sel := m.browser.selected; sel != nil && sel.SourceFile != "" {
+				editorBin := os.Getenv("EDITOR")
+				if editorBin == "" {
+					editorBin = os.Getenv("VISUAL")
+				}
+				if editorBin != "" {
+					// Use tea.ExecProcess to properly hand off the terminal
+					c := buildEditorCmd(editorBin, sel.SourceFile)
+					return m, tea.ExecProcess(c, func(err error) tea.Msg {
+						return collectionReloadMsg{}
+					})
+				}
+				// No $EDITOR set — fall back to internal editor
+				m.editor = NewEditorModelFromRequest(*sel)
+				m.editingReq = sel
+				m.showEditor = true
+			}
+			return m, nil
 		case "E":
-			// Edit selected request
+			// Always open internal editor
 			if sel := m.browser.selected; sel != nil {
 				m.editor = NewEditorModelFromRequest(*sel)
 				m.editingReq = sel
@@ -337,16 +358,7 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, func() tea.Msg { return collectionReloadMsg{} }
 			}
 			return m, nil
-		case "ctrl+e":
-			// Open current file in $EDITOR
-			if sel := m.browser.selected; sel != nil && sel.SourceFile != "" {
-				filePath := sel.SourceFile
-				return m, func() tea.Msg {
-					openInEditor(filePath)
-					return collectionReloadMsg{}
-				}
-			}
-			return m, nil
+
 		case "y":
 			// Copy current request as curl to clipboard
 			if m.detail.request != nil {
@@ -445,11 +457,11 @@ func (m App) View() tea.View {
 		case m.showPrompt:
 			statusLine = " Enter: confirm │ Esc: cancel"
 		case m.focus == PaneBrowser:
-			statusLine = fmt.Sprintf(" env:%s │ n:new req │ E:edit │ D:del │ Y:dup │ N:new file │ F:folder │ R:rename │ M:move │ ctrl+e:$EDITOR │ q:quit", envLabel)
+			statusLine = fmt.Sprintf(" env:%s │ e:edit │ E:form │ n:new │ D:del │ Y:dup │ N:file │ F:folder │ R:rename │ ctrl+e:env │ q:quit", envLabel)
 		case m.focus == PaneDetail:
 			statusLine = " Enter:send │ f:find │ w:wrap │ n/N:next/prev │ ctrl+d/u:page │ g/G:top/btm │ y:curl │ h:history │ q:quit"
 		default:
-			statusLine = fmt.Sprintf(" env:%s │ tab:switch panes │ /:search │ e:env │ q:quit", envLabel)
+			statusLine = fmt.Sprintf(" env:%s │ tab:switch │ /:search │ ctrl+e:env │ q:quit", envLabel)
 		}
 	}
 	statusBar := statusBarStyle.Width(m.width).Render(statusLine)
@@ -519,21 +531,10 @@ func (m App) currentDir() string {
 	return m.rootDir
 }
 
-// openInEditor opens filePath in $EDITOR (or vi as fallback) synchronously.
-func openInEditor(filePath string) {
-	editorBin := os.Getenv("EDITOR")
-	if editorBin == "" {
-		editorBin = os.Getenv("VISUAL")
-	}
-	if editorBin == "" {
-		editorBin = "vi"
-	}
-	// Support EDITOR with args (e.g. "code --wait")
+// buildEditorCmd creates an *exec.Cmd for the given editor binary and file path.
+// Supports EDITOR values with args like "code --wait".
+func buildEditorCmd(editorBin, filePath string) *exec.Cmd {
 	parts := strings.Fields(editorBin)
 	args := append(parts[1:], filePath)
-	cmd := exec.Command(parts[0], args...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	_ = cmd.Run()
+	return exec.Command(parts[0], args...)
 }

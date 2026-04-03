@@ -296,6 +296,15 @@ func (m EditorModel) handleBody(key string) EditorModel {
 			m.body = append(m.body[:m.bodyCursor], m.body[m.bodyCursor+1:]...)
 			m.bodyCursor--
 		}
+	case "ctrl+u":
+		// Clear current line
+		m.body[m.bodyCursor] = ""
+	case "ctrl+w":
+		// Delete word backward on current line
+		m.body[m.bodyCursor] = deleteWordBackward(m.body[m.bodyCursor])
+	case "ctrl+k":
+		// Kill to end of line (since cursor is at end, clear line)
+		m.body[m.bodyCursor] = ""
 	default:
 		if len(key) == 1 || (len(key) > 1 && !strings.HasPrefix(key, "ctrl") && !strings.HasPrefix(key, "alt")) {
 			m.body[m.bodyCursor] += key
@@ -363,7 +372,7 @@ func (m EditorModel) View() string {
 	sb.WriteString(m.renderTextField("@timeout (seconds)", m.timeoutSecs, m.focus == fieldTimeout))
 
 	sb.WriteString("\n")
-	sb.WriteString(dimStyle.Render("Tab/Shift+Tab: navigate  Ctrl+S: save  Esc: cancel"))
+	sb.WriteString(dimStyle.Render("Tab/Shift+Tab: navigate  Ctrl+S: save  Esc: cancel  Ctrl+W: del word  Ctrl+U: clear"))
 
 	return sb.String()
 }
@@ -465,7 +474,13 @@ func (m EditorModel) renderToggleField(label string, value, focused bool) string
 	return fmt.Sprintf("%s%s %s\n", indicator, labelStyle.Render(label), check)
 }
 
-// editText appends/removes characters for a single-line text field.
+// editText handles single-line text editing with readline-style shortcuts:
+//   - ctrl+a: jump to start
+//   - ctrl+e: jump to end (returns field as-is since cursor is always at end)
+//   - ctrl+u: clear entire field
+//   - ctrl+k: clear from cursor to end (same as ctrl+u with end-cursor)
+//   - ctrl+w: delete word backward
+//   - backspace: delete char backward
 func editText(s, key string) string {
 	switch key {
 	case "backspace":
@@ -474,8 +489,14 @@ func editText(s, key string) string {
 		}
 		_, size := utf8.DecodeLastRuneInString(s)
 		return s[:len(s)-size]
+	case "ctrl+u", "ctrl+k":
+		return ""
+	case "ctrl+w":
+		return deleteWordBackward(s)
+	case "ctrl+a", "ctrl+e":
+		// Cursor is always at end in this simple model, so these are no-ops
+		return s
 	default:
-		// Only accept printable single-character keys
 		r := []rune(key)
 		if len(r) == 1 {
 			return s + key
@@ -493,6 +514,10 @@ func editTextFiltered(s, key string, filter func(rune) bool) string {
 		}
 		_, size := utf8.DecodeLastRuneInString(s)
 		return s[:len(s)-size]
+	case "ctrl+u", "ctrl+k":
+		return ""
+	case "ctrl+w":
+		return deleteWordBackward(s)
 	default:
 		r := []rune(key)
 		if len(r) == 1 && filter(r[0]) {
@@ -500,6 +525,24 @@ func editTextFiltered(s, key string, filter func(rune) bool) string {
 		}
 		return s
 	}
+}
+
+// deleteWordBackward removes the last word (like ctrl+w in bash).
+func deleteWordBackward(s string) string {
+	if s == "" {
+		return s
+	}
+	runes := []rune(s)
+	i := len(runes) - 1
+	// Skip trailing spaces
+	for i >= 0 && runes[i] == ' ' {
+		i--
+	}
+	// Delete until next space or start
+	for i >= 0 && runes[i] != ' ' {
+		i--
+	}
+	return string(runes[:i+1])
 }
 
 func isDigit(r rune) bool {

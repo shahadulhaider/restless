@@ -922,7 +922,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
   - Files: `cmd/restless/main.go`
   - Pre-commit: `go build ./cmd/restless/`
 
-- [ ] 11. curl Export and Copy-to-Clipboard
+- [x] 11. curl Export and Copy-to-Clipboard
 
   **What to do**:
   - Create `internal/exporter/curl.go` with:
@@ -982,7 +982,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
   - Files: `internal/exporter/curl.go`, `internal/exporter/curl_test.go`
   - Pre-commit: `go test ./internal/exporter/...`
 
-- [ ] 12. Wire Create/Edit Request Flows into TUI App
+- [x] 12. Wire Create/Edit Request Flows into TUI App
 
   **What to do**:
   - Update `internal/tui/app.go` to integrate the EditorModel (T8) with file operations (T7)
@@ -1055,7 +1055,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
   - Message: `feat(tui): wire create/edit request flows`
   - Files: `internal/tui/app.go`, `internal/tui/detail.go`
 
-- [ ] 13. Wire Collection Management into Browser
+- [x] 13. Wire Collection Management into Browser
 
   **What to do**:
   - Update `internal/tui/browser.go` and `internal/tui/app.go` to add collection management keybindings:
@@ -1135,7 +1135,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
   - Message: `feat(tui): wire collection management into browser`
   - Files: `internal/tui/browser.go`, `internal/tui/app.go`
 
-- [ ] 14. $EDITOR Integration
+- [x] 14. $EDITOR Integration
 
   **What to do**:
   - Create `internal/tui/editor_external.go` with function to open a file in the user's editor
@@ -1199,7 +1199,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
   - Message: `feat(tui): add $EDITOR integration`
   - Files: `internal/tui/editor_external.go`, `internal/tui/app.go`
 
-- [ ] 15. Wire curl Export into TUI
+- [x] 15. Wire curl Export into TUI
 
   **What to do**:
   - Add keybinding `c` in detail view: copy current request as curl to clipboard

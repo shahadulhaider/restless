@@ -174,6 +174,14 @@ func requestLabel(req *model.Request) string {
 	return req.Method + " " + req.URL
 }
 
+// CurrentItem returns the BrowserItem under the cursor, or nil.
+func (m *BrowserModel) CurrentItem() *BrowserItem {
+	if m.cursor < len(m.items) {
+		return &m.items[m.cursor]
+	}
+	return nil
+}
+
 func (m BrowserModel) Init() tea.Cmd {
 	return nil
 }

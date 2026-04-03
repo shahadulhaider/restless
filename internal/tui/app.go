@@ -2,14 +2,20 @@ package tui
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
 	"github.com/shahadulhaider/restless/internal/engine"
+	"github.com/shahadulhaider/restless/internal/exporter"
 	"github.com/shahadulhaider/restless/internal/history"
 	"github.com/shahadulhaider/restless/internal/model"
 	"github.com/shahadulhaider/restless/internal/parser"
+	"github.com/shahadulhaider/restless/internal/writer"
 )
 
 type Pane int
@@ -32,6 +38,10 @@ type envVarsMsg struct {
 	envName string
 }
 
+type collectionReloadMsg struct{}
+type statusMsg struct{ text string }
+type editorOpenedInExternalEditor struct{ filePath string }
+
 type App struct {
 	rootDir       string
 	width, height int
@@ -40,13 +50,21 @@ type App struct {
 	detail        DetailModel
 	search        SearchModel
 	envSwitch     EnvModel
+	editor        EditorModel
+	confirm       ConfirmModel
+	prompt        PromptModel
 	showSearch    bool
 	showEnvSwitch bool
+	showEditor    bool
+	showConfirm   bool
+	showPrompt    bool
+	editingReq    *model.Request // nil = create mode, non-nil = edit mode
 	currentEnv    string
 	envFile       *model.EnvironmentFile
 	envVars       map[string]string
 	chainCtx      *parser.ChainContext
 	cookies       *engine.CookieManager
+	statusText    string // ephemeral status message
 }
 
 func New(rootDir string) App {
@@ -110,6 +128,17 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.envSwitch.SetEnvFile(msg.envFile, m.currentEnv)
 		return m, nil
 
+	case collectionReloadMsg:
+		rootDir := m.rootDir
+		return m, func() tea.Msg {
+			c, _ := LoadCollection(rootDir)
+			return collectionLoaded{collection: c}
+		}
+
+	case statusMsg:
+		m.statusText = msg.text
+		return m, nil
+
 	case RequestSelected:
 		m.detail, _ = m.detail.Update(msg)
 		m.showSearch = false
@@ -118,6 +147,87 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SearchSelected:
 		m.showSearch = false
 		m.detail, _ = m.detail.Update(RequestSelected{Request: msg.Request})
+		return m, nil
+
+	case EditorSaved:
+		m.showEditor = false
+		req := msg.Request
+		var err error
+		if m.editingReq != nil {
+			// Edit mode — update the existing request
+			err = writer.UpdateRequest(m.editingReq.SourceFile, *m.editingReq, req)
+		} else {
+			// Create mode — insert into current file or default
+			targetFile := m.currentEditFile()
+			err = writer.InsertRequest(targetFile, req)
+		}
+		m.editingReq = nil
+		if err != nil {
+			m.statusText = "Error: " + err.Error()
+		}
+		return m, func() tea.Msg { return collectionReloadMsg{} }
+
+	case EditorCancelled:
+		m.showEditor = false
+		m.editingReq = nil
+		return m, nil
+
+	case ConfirmResult:
+		m.showConfirm = false
+		if !msg.Confirmed {
+			return m, nil
+		}
+		switch result := msg.Context.(type) {
+		case confirmDeleteRequest:
+			if err := writer.DeleteRequest(result.req.SourceFile, result.req); err != nil {
+				m.statusText = "Error: " + err.Error()
+			} else {
+				return m, func() tea.Msg { return collectionReloadMsg{} }
+			}
+		case confirmDeleteEntry:
+			if err := writer.DeleteEntry(m.rootDir, result.relPath); err != nil {
+				m.statusText = "Error: " + err.Error()
+			} else {
+				return m, func() tea.Msg { return collectionReloadMsg{} }
+			}
+		}
+		return m, nil
+
+	case PromptResult:
+		m.showPrompt = false
+		if !msg.OK {
+			return m, nil
+		}
+		switch ctx := msg.Context.(type) {
+		case promptCreateFile:
+			if err := writer.CreateHTTPFile(m.rootDir, ctx.dir+"/"+msg.Value+".http"); err != nil {
+				m.statusText = "Error: " + err.Error()
+			} else {
+				return m, func() tea.Msg { return collectionReloadMsg{} }
+			}
+		case promptCreateDir:
+			name := msg.Value
+			if ctx.parent != "" {
+				name = ctx.parent + "/" + name
+			}
+			if err := writer.CreateDirectory(m.rootDir, name); err != nil {
+				m.statusText = "Error: " + err.Error()
+			} else {
+				return m, func() tea.Msg { return collectionReloadMsg{} }
+			}
+		case promptRename:
+			if err := writer.RenameEntry(m.rootDir, ctx.relPath, filepath.Dir(ctx.relPath)+"/"+msg.Value); err != nil {
+				m.statusText = "Error: " + err.Error()
+			} else {
+				return m, func() tea.Msg { return collectionReloadMsg{} }
+			}
+		case promptMove:
+			if err := writer.MoveEntry(m.rootDir, ctx.relPath, msg.Value); err != nil {
+				m.statusText = "Error: " + err.Error()
+			} else {
+				return m, func() tea.Msg { return collectionReloadMsg{} }
+			}
+		}
 		return m, nil
 
 	case EnvChanged:
@@ -146,6 +256,21 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case tea.KeyPressMsg:
+		if m.showEditor {
+			var cmd tea.Cmd
+			m.editor, cmd = m.editor.Update(msg)
+			return m, cmd
+		}
+		if m.showConfirm {
+			var cmd tea.Cmd
+			m.confirm, cmd = m.confirm.Update(msg)
+			return m, cmd
+		}
+		if m.showPrompt {
+			var cmd tea.Cmd
+			m.prompt, cmd = m.prompt.Update(msg)
+			return m, cmd
+		}
 		if m.showSearch {
 			if msg.String() == "esc" {
 				m.showSearch = false
@@ -180,6 +305,91 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "e":
 			m.showEnvSwitch = true
+			return m, nil
+		case "n":
+			// Create new request
+			m.editor = NewEditorModel()
+			m.editingReq = nil
+			m.showEditor = true
+			return m, nil
+		case "E":
+			// Edit selected request
+			if sel := m.browser.selected; sel != nil {
+				m.editor = NewEditorModelFromRequest(*sel)
+				m.editingReq = sel
+				m.showEditor = true
+			}
+			return m, nil
+		case "D":
+			// Delete selected request (with confirmation)
+			if sel := m.browser.selected; sel != nil {
+				m.confirm = NewConfirmModel("Delete this request?", confirmDeleteRequest{req: *sel})
+				m.showConfirm = true
+			}
+			return m, nil
+		case "Y":
+			// Duplicate selected request
+			if sel := m.browser.selected; sel != nil {
+				targetFile := sel.SourceFile
+				if err := writer.DuplicateRequest(*sel, targetFile); err != nil {
+					m.statusText = "Error: " + err.Error()
+				}
+				return m, func() tea.Msg { return collectionReloadMsg{} }
+			}
+			return m, nil
+		case "ctrl+e":
+			// Open current file in $EDITOR
+			if sel := m.browser.selected; sel != nil && sel.SourceFile != "" {
+				filePath := sel.SourceFile
+				return m, func() tea.Msg {
+					openInEditor(filePath)
+					return collectionReloadMsg{}
+				}
+			}
+			return m, nil
+		case "y":
+			// Copy current request as curl to clipboard
+			if m.detail.request != nil {
+				curlCmd := exporter.ToCurl(*m.detail.request)
+				if err := exporter.CopyToClipboard(curlCmd); err != nil {
+					m.statusText = "Copy failed: " + err.Error()
+				} else {
+					m.statusText = "Copied as curl to clipboard"
+				}
+			}
+			return m, nil
+		case "N":
+			// Create new .http file in current directory
+			dir := m.currentDir()
+			relDir, _ := filepath.Rel(m.rootDir, dir)
+			m.prompt = NewPromptModel("New file name (without .http)", promptCreateFile{dir: relDir})
+			m.showPrompt = true
+			return m, nil
+		case "F":
+			// Create new folder
+			dir := m.currentDir()
+			parent, _ := filepath.Rel(m.rootDir, dir)
+			if parent == "." {
+				parent = ""
+			}
+			m.prompt = NewPromptModel("New folder name", promptCreateDir{parent: parent})
+			m.showPrompt = true
+			return m, nil
+		case "R":
+			// Rename selected item
+			if item := m.browser.CurrentItem(); item != nil {
+				rel, _ := filepath.Rel(m.rootDir, item.Path)
+				m.prompt = NewPromptModel("Rename to", promptRename{relPath: rel})
+				m.showPrompt = true
+			}
+			return m, nil
+		case "M":
+			// Move selected item
+			if item := m.browser.CurrentItem(); item != nil {
+				rel, _ := filepath.Rel(m.rootDir, item.Path)
+				m.prompt = NewPromptModel("Move to (relative path)", promptMove{relPath: rel})
+				m.showPrompt = true
+			}
 			return m, nil
 		}
 
@@ -225,11 +435,29 @@ func (m App) View() tea.View {
 	if envLabel == "" {
 		envLabel = "none"
 	}
-	statusText := fmt.Sprintf(" env: %s │ tab: switch │ /: search │ e: env │ q: quit", envLabel)
-	statusBar := statusBarStyle.Width(m.width).Render(statusText)
+	statusLine := m.statusText
+	if statusLine == "" {
+		statusLine = fmt.Sprintf(" env: %s │ n: new │ E: edit │ D: del │ Y: dup │ ctrl+e: $EDITOR │ y: copy curl │ q: quit", envLabel)
+	}
+	statusBar := statusBarStyle.Width(m.width).Render(statusLine)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, mainContent, statusBar)
 
+	if m.showEditor {
+		editorView := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorBorderActive).
+			Padding(1, 2).
+			Width(m.width * 8 / 10).
+			Render(m.editor.View())
+		content = lipgloss.JoinVertical(lipgloss.Left, editorView, content)
+	}
+	if m.showConfirm {
+		content = lipgloss.JoinVertical(lipgloss.Left, m.confirm.View(), content)
+	}
+	if m.showPrompt {
+		content = lipgloss.JoinVertical(lipgloss.Left, m.prompt.View(), content)
+	}
 	if m.showSearch {
 		content = lipgloss.JoinVertical(lipgloss.Left, m.search.View(), content)
 	}
@@ -246,4 +474,53 @@ func RunApp(rootDir string) error {
 	p := tea.NewProgram(New(rootDir))
 	_, err := p.Run()
 	return err
+}
+
+// confirmDeleteRequest is the Context payload for delete confirmations.
+type confirmDeleteRequest struct{ req model.Request }
+type confirmDeleteEntry struct{ relPath string }
+
+// Prompt context types
+type promptCreateFile struct{ dir string }
+type promptCreateDir struct{ parent string }
+type promptRename struct{ relPath string }
+type promptMove struct{ relPath string }
+
+// currentEditFile returns the file where a new request should be inserted.
+// Prefers the currently selected file in the browser; falls back to a default.
+func (m App) currentEditFile() string {
+	if sel := m.browser.selected; sel != nil && sel.SourceFile != "" {
+		return sel.SourceFile
+	}
+	return filepath.Join(m.rootDir, "requests.http")
+}
+
+// currentDir returns the directory of the currently selected browser item.
+func (m App) currentDir() string {
+	if item := m.browser.CurrentItem(); item != nil {
+		if item.Type == ItemTypeDir {
+			return filepath.Join(m.rootDir, item.Path)
+		}
+		return filepath.Dir(item.Path)
+	}
+	return m.rootDir
+}
+
+// openInEditor opens filePath in $EDITOR (or vi as fallback) synchronously.
+func openInEditor(filePath string) {
+	editorBin := os.Getenv("EDITOR")
+	if editorBin == "" {
+		editorBin = os.Getenv("VISUAL")
+	}
+	if editorBin == "" {
+		editorBin = "vi"
+	}
+	// Support EDITOR with args (e.g. "code --wait")
+	parts := strings.Fields(editorBin)
+	args := append(parts[1:], filePath)
+	cmd := exec.Command(parts[0], args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	_ = cmd.Run()
 }

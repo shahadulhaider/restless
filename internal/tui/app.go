@@ -57,6 +57,8 @@ type App struct {
 	showEditor    bool
 	showConfirm   bool
 	showPrompt    bool
+	showHelp      bool
+	help          HelpModel
 	editingReq    *model.Request // nil = create mode, non-nil = edit mode
 	currentEnv    string
 	envFile       *model.EnvironmentFile
@@ -263,6 +265,15 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case tea.KeyPressMsg:
+		if m.showHelp {
+			if msg.String() == "?" || msg.String() == "esc" || msg.String() == "f1" {
+				m.showHelp = false
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.help, cmd = m.help.Update(msg)
+			return m, cmd
+		}
 		if m.showEditor {
 			var cmd tea.Cmd
 			m.editor, cmd = m.editor.Update(msg)
@@ -298,6 +309,19 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch msg.String() {
+		case "?":
+			m.help = NewHelpModel(helpFull, "")
+			m.help.width = m.width
+			m.help.height = m.height
+			m.showHelp = true
+			return m, nil
+		case "f1":
+			ctx := m.helpContext()
+			m.help = NewHelpModel(helpContext, ctx)
+			m.help.width = m.width
+			m.help.height = m.height
+			m.showHelp = true
+			return m, nil
 		case "q", "ctrl+c":
 			return m, tea.Quit
 		case "tab":
@@ -454,7 +478,7 @@ func (m App) View() tea.View {
 		case m.showPrompt:
 			statusLine = " Enter: confirm │ Esc: cancel"
 		case m.focus == PaneBrowser:
-			statusLine = fmt.Sprintf(" env:%s │ e:edit │ E:form │ n:new │ D:del │ Y:dup │ N:file │ F:folder │ R:rename │ ctrl+e:env │ q:quit", envLabel)
+			statusLine = fmt.Sprintf(" env:%s │ e:edit │ n:new │ D:del │ Y:dup │ N:file │ F:folder │ ?:help │ q:quit", envLabel)
 		case m.focus == PaneDetail:
 			if m.detail.response != nil {
 				if m.detail.mode == modeResponse {
@@ -493,6 +517,16 @@ func (m App) View() tea.View {
 	}
 	if m.showEnvSwitch {
 		content = lipgloss.JoinVertical(lipgloss.Left, m.envSwitch.View(), content)
+	}
+	if m.showHelp {
+		helpView := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorBorderActive).
+			Padding(1, 2).
+			Width(m.width * 8 / 10).
+			Height(m.height - 4).
+			Render(m.help.View())
+		content = helpView
 	}
 
 	v := tea.NewView(content)
@@ -534,6 +568,26 @@ func (m App) currentDir() string {
 		return filepath.Dir(item.Path)
 	}
 	return m.rootDir
+}
+
+// helpContext returns the context string for F1 context-sensitive help.
+func (m App) helpContext() string {
+	if m.showEditor {
+		return "editor"
+	}
+	if m.showSearch {
+		return "search"
+	}
+	if m.focus == PaneBrowser {
+		return "browser"
+	}
+	if m.focus == PaneDetail {
+		if m.detail.response != nil && m.detail.mode == modeResponse {
+			return "detail-response"
+		}
+		return "detail-request"
+	}
+	return ""
 }
 
 // buildEditorCmd creates an *exec.Cmd for the given editor binary and file path.

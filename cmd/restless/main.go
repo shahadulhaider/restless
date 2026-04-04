@@ -25,8 +25,20 @@ func main() {
 func rootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "restless [directory]",
-		Short: "TUI HTTP client using .http files",
-		Args:  cobra.MaximumNArgs(1),
+		Short: "A terminal-native HTTP client with TUI — uses .http files",
+		Long: `restless is a full-featured HTTP client that runs in your terminal.
+
+It uses .http files — the same plain-text format supported by JetBrains IDEs
+and VS Code REST Client. Browse requests in a TUI, send them, inspect responses,
+and manage collections without leaving the terminal.
+
+  restless .                    Launch TUI in current directory
+  restless ./my-api             Launch TUI for a specific collection
+  restless run api.http         Run requests headlessly (CI/CD)
+  restless import openapi spec  Import from OpenAPI, Postman, Insomnia, Bruno
+
+Press ? in the TUI for keyboard shortcuts, or F1 for context-sensitive help.`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := "."
 			if len(args) == 1 {
@@ -51,6 +63,15 @@ func importCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "import",
 		Short: "Import collections from other tools",
+		Long: `Import API collections from Postman, Insomnia, Bruno, curl commands,
+or OpenAPI/Swagger specs. Converts them to .http files.
+
+Examples:
+  restless import postman collection.json --output ./my-api
+  restless import insomnia export.json --output ./api
+  restless import bruno ./bruno-collection --output ./api
+  restless import curl "curl -X POST https://api.example.com/users -H 'Content-Type: application/json'"
+  restless import openapi swagger.yaml --output ./api`,
 	}
 
 	postman := &cobra.Command{
@@ -182,7 +203,19 @@ func runCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "run <file.http>",
 		Short: "Execute all requests in a .http file headlessly",
-		Args:  cobra.ExactArgs(1),
+		Long: `Execute all requests in a .http file without the TUI.
+
+Useful for CI/CD pipelines and scripting. Supports environment variables,
+request chaining, and response assertions (# @assert).
+
+Examples:
+  restless run api.http
+  restless run api.http --env production
+  restless run api.http --env dev --fail-fast
+  restless run api.http --insecure --proxy http://proxy:8080
+
+Exit code is 1 if any request fails or any assertion fails.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			filePath := args[0]
 			rootDir := filepath.Dir(filePath)

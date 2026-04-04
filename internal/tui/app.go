@@ -457,7 +457,11 @@ func (m App) View() tea.View {
 			statusLine = fmt.Sprintf(" env:%s │ e:edit │ E:form │ n:new │ D:del │ Y:dup │ N:file │ F:folder │ R:rename │ ctrl+e:env │ q:quit", envLabel)
 		case m.focus == PaneDetail:
 			if m.detail.response != nil {
-				statusLine = " 1/2/3:sections │ space:fold │ y:yank(b/h/a/c) │ p:pretty │ f:find │ z:fold │ h:hist │ Enter:send"
+				if m.detail.mode == modeResponse {
+					statusLine = " [r]req [s]resp │ 1/2/3:fold │ space:toggle │ y:yank(b/h/a/c) │ p:pretty │ f:find │ Enter:send"
+				} else {
+					statusLine = " [r]req [s]resp │ 1/2/3:fold │ space:toggle │ y:yank(b/h/a/c) │ Enter:send │ e:edit"
+				}
 			} else {
 				statusLine = " Enter:send │ e:edit │ h:history │ q:quit"
 			}

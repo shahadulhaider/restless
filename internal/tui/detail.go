@@ -20,9 +20,9 @@ import (
 type detailTab int
 
 const (
-	tabHeaders detailTab = iota
-	tabBody
-	tabTiming
+	tabBody    detailTab = iota // 1 — body first
+	tabHeaders                  // 2
+	tabTiming                   // 3
 )
 
 type DetailModel struct {
@@ -45,13 +45,14 @@ type DetailModel struct {
 	diffMode       bool
 	diffIdxA       int
 
-	// Body viewer enhancements
+	// Body viewer
 	wordWrap     bool
 	showLineNums bool
-	searching    bool   // true when search input is active
-	searchQuery  string // current search text
-	searchHits   []int  // line indices that match
-	searchIdx    int    // current match index in searchHits
+	prettyPrint  bool   // true = formatted, false = raw
+	searching    bool
+	searchQuery  string
+	searchHits   []int
+	searchIdx    int
 }
 
 type responseReceived struct {
@@ -70,6 +71,8 @@ func NewDetailModel(rootDir string, chainCtx *parser.ChainContext, cookies *engi
 		cookies:      cookies,
 		envVars:      make(map[string]string),
 		showLineNums: true,
+		prettyPrint:  true,
+		tab:          tabBody, // body is default
 	}
 }
 
@@ -77,11 +80,10 @@ func (m DetailModel) Init() tea.Cmd {
 	return nil
 }
 
-// viewableHeight returns how many body lines fit in the detail pane.
 func (m DetailModel) viewableHeight() int {
-	h := m.height - 6 // status line + tabs + padding
+	h := m.height - 5 // sticky status + tab bar + padding
 	if m.searching {
-		h-- // search bar takes a line
+		h--
 	}
 	if h < 1 {
 		h = 1
@@ -121,6 +123,7 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 			m.errMsg = ""
 		}
 		m.offset = 0
+		m.tab = tabBody // always show body after response
 		m.clearSearch()
 
 	case tea.KeyPressMsg:
@@ -177,7 +180,6 @@ func (m DetailModel) updateSearch(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 		m.searching = false
 	case "enter":
 		m.searching = false
-		// Keep search results visible, jump to first match
 		if len(m.searchHits) > 0 {
 			m.offset = m.searchHits[m.searchIdx]
 		}
@@ -199,10 +201,10 @@ func (m DetailModel) updateSearch(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 	switch msg.String() {
 	case "1":
-		m.tab = tabHeaders
+		m.tab = tabBody
 		m.offset = 0
 	case "2":
-		m.tab = tabBody
+		m.tab = tabHeaders
 		m.offset = 0
 	case "3":
 		m.tab = tabTiming
@@ -239,7 +241,7 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 			}
 		}
 
-	// --- Scrolling ---
+	// Scrolling
 	case "j", "down":
 		m.offset++
 	case "k", "up":
@@ -256,15 +258,17 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 	case "g":
 		m.offset = 0
 	case "G":
-		// Jump to bottom — clamped in View()
 		m.offset = 999999
 
-	// --- Body viewer controls ---
+	// Body controls
 	case "w":
 		m.wordWrap = !m.wordWrap
 		m.offset = 0
 	case "l":
 		m.showLineNums = !m.showLineNums
+	case "p":
+		m.prettyPrint = !m.prettyPrint
+		m.offset = 0
 	case "f":
 		if m.response != nil && m.tab == tabBody {
 			m.searching = true
@@ -273,13 +277,11 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 			m.searchIdx = 0
 		}
 	case "n":
-		// Next search match
 		if len(m.searchHits) > 0 {
 			m.searchIdx = (m.searchIdx + 1) % len(m.searchHits)
 			m.offset = m.searchHits[m.searchIdx]
 		}
 	case "N":
-		// Previous search match
 		if len(m.searchHits) > 0 {
 			m.searchIdx = (m.searchIdx - 1 + len(m.searchHits)) % len(m.searchHits)
 			m.offset = m.searchHits[m.searchIdx]
@@ -288,7 +290,7 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 	return m, nil
 }
 
-// --- Search helpers ---
+// --- Search ---
 
 func (m *DetailModel) clearSearch() {
 	m.searching = false
@@ -345,28 +347,26 @@ func (m DetailModel) View() string {
 		return sb.String()
 	}
 
-	// Status line + body info
-	sb.WriteString(statusLine(m.response))
-	sb.WriteString("  ")
-	sb.WriteString(dimStyle.Render(bodyInfo(m.response)))
+	// ── Sticky status bar ──
+	sb.WriteString(m.stickyStatus())
 	sb.WriteString("\n")
 
-	// Tab bar
+	// ── Tab bar ──
 	sb.WriteString(m.tabBar())
 	sb.WriteString("\n\n")
 
-	// Tab content
-	var body string
+	// ── Tab content ──
+	var content string
 	switch m.tab {
-	case tabHeaders:
-		body = headersView(m.response)
 	case tabBody:
-		body = m.enhancedBodyView()
+		content = m.enhancedBodyView()
+	case tabHeaders:
+		content = headersView(m.response)
 	case tabTiming:
-		body = timingView(m.response)
+		content = timingView(m.response)
 	}
 
-	lines := strings.Split(body, "\n")
+	lines := strings.Split(content, "\n")
 
 	// Clamp offset
 	maxOffset := len(lines) - m.viewableHeight()
@@ -388,13 +388,13 @@ func (m DetailModel) View() string {
 		sb.WriteString(l + "\n")
 	}
 
-	// Scroll indicator
+	// Scroll position
 	if len(lines) > m.viewableHeight() {
 		pct := 0
 		if maxOffset > 0 {
 			pct = m.offset * 100 / maxOffset
 		}
-		sb.WriteString(dimStyle.Render(fmt.Sprintf("── %d%% (%d/%d lines) ──", pct, m.offset+1, len(lines))))
+		sb.WriteString(dimStyle.Render(fmt.Sprintf("── %d%% (%d/%d) ──", pct, m.offset+1, len(lines))))
 	}
 
 	// Search bar
@@ -402,9 +402,10 @@ func (m DetailModel) View() string {
 		sb.WriteString("\n")
 		matchInfo := ""
 		if m.searchQuery != "" {
-			matchInfo = fmt.Sprintf(" [%d/%d]", m.searchIdx+1, len(m.searchHits))
 			if len(m.searchHits) == 0 {
 				matchInfo = " [no match]"
+			} else {
+				matchInfo = fmt.Sprintf(" [%d/%d]", m.searchIdx+1, len(m.searchHits))
 			}
 		}
 		sb.WriteString(lipgloss.NewStyle().Foreground(colorBorderActive).Render("find: " + m.searchQuery + "█" + matchInfo))
@@ -413,58 +414,158 @@ func (m DetailModel) View() string {
 	return sb.String()
 }
 
+// stickyStatus renders the always-visible status bar at the top of the response view.
+func (m DetailModel) stickyStatus() string {
+	resp := m.response
+	if resp == nil {
+		return ""
+	}
+
+	// Status code with color
+	code := resp.StatusCode
+	var clr color.Color
+	var icon string
+	switch {
+	case code >= 200 && code < 300:
+		clr = lipgloss.Color("#4CAF50")
+		icon = "✓"
+	case code >= 300 && code < 400:
+		clr = lipgloss.Color("#FFFF00")
+		icon = "→"
+	case code >= 400 && code < 500:
+		clr = lipgloss.Color("#FF9800")
+		icon = "✗"
+	default:
+		clr = lipgloss.Color("#F44336")
+		icon = "✗"
+	}
+
+	statusStyle := lipgloss.NewStyle().Foreground(clr).Bold(true)
+	status := statusStyle.Render(fmt.Sprintf("%s %d %s", icon, code, resp.Status))
+
+	// Content type (shortened)
+	ct := resp.ContentType
+	if idx := strings.Index(ct, ";"); idx > 0 {
+		ct = strings.TrimSpace(ct[:idx])
+	}
+	ct = strings.TrimPrefix(ct, "application/")
+	ct = strings.TrimPrefix(ct, "text/")
+
+	// Body size
+	size := len(resp.Body)
+	var sizeStr string
+	switch {
+	case size == 0:
+		sizeStr = "0 B"
+	case size < 1024:
+		sizeStr = fmt.Sprintf("%d B", size)
+	case size < 1024*1024:
+		sizeStr = fmt.Sprintf("%.1f KB", float64(size)/1024)
+	default:
+		sizeStr = fmt.Sprintf("%.1f MB", float64(size)/(1024*1024))
+	}
+
+	// Timing (total only)
+	timing := ""
+	if resp.Timing.Total > 0 {
+		ms := resp.Timing.Total.Milliseconds()
+		if ms < 1000 {
+			timing = fmt.Sprintf("%dms", ms)
+		} else {
+			timing = fmt.Sprintf("%.1fs", float64(ms)/1000)
+		}
+	}
+
+	// Compose: ✓ 200 OK  ──  json  2.4 KB  142ms
+	sep := dimStyle.Render(" ── ")
+	parts := []string{status}
+	if ct != "" {
+		parts = append(parts, dimStyle.Render(ct))
+	}
+	parts = append(parts, dimStyle.Render(sizeStr))
+	if timing != "" {
+		parts = append(parts, dimStyle.Render(timing))
+	}
+
+	return strings.Join(parts, sep)
+}
+
 func (m DetailModel) tabBar() string {
-	tabs := []string{"1:Headers", "2:Body", "3:Timing"}
+	type tabDef struct {
+		key   string
+		label string
+		tab   detailTab
+	}
+	tabs := []tabDef{
+		{"1", "Body", tabBody},
+		{"2", "Headers", tabHeaders},
+		{"3", "Timing", tabTiming},
+	}
+
 	var sb strings.Builder
 	for i, t := range tabs {
-		if detailTab(i) == m.tab {
-			sb.WriteString(lipgloss.NewStyle().Underline(true).Foreground(lipgloss.Color("#CDD6F4")).Render(t))
+		label := t.key + ":" + t.label
+		if t.tab == m.tab {
+			sb.WriteString(lipgloss.NewStyle().
+				Underline(true).
+				Bold(true).
+				Foreground(lipgloss.Color("#CDD6F4")).
+				Render(label))
 		} else {
-			sb.WriteString(dimStyle.Render(t))
+			sb.WriteString(dimStyle.Render(label))
 		}
 		if i < len(tabs)-1 {
 			sb.WriteString("  ")
 		}
 	}
-	// Body tab extras
+
+	// Body tab indicators
 	if m.tab == tabBody && m.response != nil {
-		extras := []string{}
+		var extras []string
+		if !m.prettyPrint {
+			extras = append(extras, "raw")
+		}
 		if m.wordWrap {
-			extras = append(extras, "wrap:on")
+			extras = append(extras, "wrap")
 		}
 		if m.searchQuery != "" && !m.searching {
-			extras = append(extras, fmt.Sprintf("/%s", m.searchQuery))
+			extras = append(extras, "/"+m.searchQuery)
 		}
 		if len(extras) > 0 {
-			sb.WriteString("  " + dimStyle.Render(strings.Join(extras, " │ ")))
+			sb.WriteString("  " + dimStyle.Render("["+strings.Join(extras, " ")+"]"))
 		}
 	}
 	return sb.String()
 }
 
-// getBodyText returns the formatted body text (without line numbers or highlights).
 func (m DetailModel) getBodyText() string {
 	if m.response == nil || len(m.response.Body) == 0 {
 		return ""
 	}
-	return formatBody(m.response, m.width-8) // leave room for line numbers
+	if m.prettyPrint {
+		return formatBody(m.response, m.bodyWidth())
+	}
+	return string(m.response.Body)
 }
 
-// enhancedBodyView renders the body with line numbers, search highlights, and word wrap.
 func (m DetailModel) enhancedBodyView() string {
 	if m.response == nil || len(m.response.Body) == 0 {
 		return dimStyle.Render("(empty body)")
 	}
 
-	raw := formatBody(m.response, m.bodyWidth())
+	var raw string
+	if m.prettyPrint {
+		raw = formatBody(m.response, m.bodyWidth())
+	} else {
+		raw = string(m.response.Body)
+	}
 	lines := strings.Split(raw, "\n")
 
-	// Word wrap
 	if m.wordWrap {
 		lines = wrapLines(lines, m.bodyWidth())
 	}
 
-	// Build search match set
+	// Search match set
 	matchSet := make(map[int]bool)
 	for _, idx := range m.searchHits {
 		matchSet[idx] = true
@@ -481,13 +582,11 @@ func (m DetailModel) enhancedBodyView() string {
 
 	var sb strings.Builder
 	for i, line := range lines {
-		// Line number
 		if m.showLineNums {
 			num := fmt.Sprintf("%*d │ ", lineNumWidth, i+1)
 			sb.WriteString(lineNumStyle.Render(num))
 		}
 
-		// Highlight search matches
 		if m.searchQuery != "" && matchSet[i] {
 			if i == currentMatch {
 				line = highlightLine(line, m.searchQuery, currentMatchStyle)
@@ -503,9 +602,9 @@ func (m DetailModel) enhancedBodyView() string {
 }
 
 func (m DetailModel) bodyWidth() int {
-	w := m.width - 4 // border padding
+	w := m.width - 4
 	if m.showLineNums {
-		w -= 8 // line number column
+		w -= 8
 	}
 	if w < 20 {
 		w = 20
@@ -561,48 +660,6 @@ func requestView(req *model.Request) string {
 	return sb.String()
 }
 
-func statusLine(resp *model.Response) string {
-	code := resp.StatusCode
-	var clr color.Color
-	switch {
-	case code >= 200 && code < 300:
-		clr = lipgloss.Color("#4CAF50")
-	case code >= 300 && code < 400:
-		clr = lipgloss.Color("#FFFF00")
-	case code >= 400 && code < 500:
-		clr = lipgloss.Color("#FF9800")
-	default:
-		clr = lipgloss.Color("#F44336")
-	}
-	return lipgloss.NewStyle().Foreground(clr).Bold(true).Render(fmt.Sprintf("HTTP %d %s", code, resp.Status))
-}
-
-func bodyInfo(resp *model.Response) string {
-	size := len(resp.Body)
-	var sizeStr string
-	switch {
-	case size == 0:
-		return "0 B"
-	case size < 1024:
-		sizeStr = fmt.Sprintf("%d B", size)
-	case size < 1024*1024:
-		sizeStr = fmt.Sprintf("%.1f KB", float64(size)/1024)
-	default:
-		sizeStr = fmt.Sprintf("%.1f MB", float64(size)/(1024*1024))
-	}
-	ct := resp.ContentType
-	if idx := strings.Index(ct, ";"); idx > 0 {
-		ct = strings.TrimSpace(ct[:idx])
-	}
-	if ct == "" {
-		return sizeStr
-	}
-	// Shorten common content types
-	ct = strings.TrimPrefix(ct, "application/")
-	ct = strings.TrimPrefix(ct, "text/")
-	return fmt.Sprintf("%s  %s", ct, sizeStr)
-}
-
 func headersView(resp *model.Response) string {
 	var sb strings.Builder
 	for _, h := range resp.Headers {
@@ -612,27 +669,22 @@ func headersView(resp *model.Response) string {
 	return sb.String()
 }
 
-// formatBody renders the response body with syntax-appropriate formatting.
 func formatBody(resp *model.Response, maxWidth int) string {
 	if len(resp.Body) == 0 {
 		return ""
 	}
 	ct := strings.ToLower(resp.ContentType)
-
 	switch {
 	case strings.Contains(ct, "json"):
 		formatted := pretty.Pretty(resp.Body)
 		return string(pretty.Color(formatted, nil))
-
 	case strings.Contains(ct, "xml"), strings.Contains(ct, "html"):
 		return indentXML(string(resp.Body))
-
 	default:
 		return string(resp.Body)
 	}
 }
 
-// indentXML does a best-effort pretty-print of XML/HTML content.
 func indentXML(s string) string {
 	decoder := xml.NewDecoder(strings.NewReader(s))
 	var sb strings.Builder
@@ -670,13 +722,10 @@ func indentXML(s string) string {
 			}
 		}
 	}
-
-	result := sb.String()
-	if result == "" {
-		// XML parsing failed — return raw
+	if sb.Len() == 0 {
 		return s
 	}
-	return result
+	return sb.String()
 }
 
 func timingView(resp *model.Response) string {
@@ -712,28 +761,24 @@ func timingView(resp *model.Response) string {
 		}
 		bar := lipgloss.NewStyle().Foreground(lipgloss.Color(p.clr)).Render(strings.Repeat("█", filled))
 		bar += dimStyle.Render(strings.Repeat("░", empty))
-		msStr := fmt.Sprintf("%dms", p.ms)
-		sb.WriteString(fmt.Sprintf("%s  %s  %s\n", dimStyle.Render(p.name), bar, msStr))
+		sb.WriteString(fmt.Sprintf("%s  %s  %dms\n", dimStyle.Render(p.name), bar, p.ms))
 	}
 	return sb.String()
 }
 
-// --- Utility functions ---
+// --- Utility ---
 
-// wrapLines wraps lines that exceed maxWidth, preserving line indices for search.
 func wrapLines(lines []string, maxWidth int) []string {
 	if maxWidth <= 0 {
 		return lines
 	}
 	var wrapped []string
 	for _, line := range lines {
-		// Strip ANSI for length measurement but keep styled text
 		plain := stripANSI(line)
 		if len(plain) <= maxWidth {
 			wrapped = append(wrapped, line)
 			continue
 		}
-		// Naive wrap at maxWidth characters for plain text
 		for len(plain) > maxWidth {
 			wrapped = append(wrapped, plain[:maxWidth])
 			plain = plain[maxWidth:]
@@ -745,7 +790,6 @@ func wrapLines(lines []string, maxWidth int) []string {
 	return wrapped
 }
 
-// stripANSI removes ANSI escape sequences for accurate length measurement.
 func stripANSI(s string) string {
 	var sb strings.Builder
 	inEsc := false
@@ -765,7 +809,6 @@ func stripANSI(s string) string {
 	return sb.String()
 }
 
-// highlightLine highlights occurrences of query in line using the given style.
 func highlightLine(line, query string, style lipgloss.Style) string {
 	if query == "" {
 		return line

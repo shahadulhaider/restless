@@ -459,7 +459,7 @@ func (m App) View() tea.View {
 		case m.focus == PaneBrowser:
 			statusLine = fmt.Sprintf(" env:%s │ e:edit │ E:form │ n:new │ D:del │ Y:dup │ N:file │ F:folder │ R:rename │ ctrl+e:env │ q:quit", envLabel)
 		case m.focus == PaneDetail:
-			statusLine = " Enter:send │ f:find │ w:wrap │ n/N:next/prev │ ctrl+d/u:page │ g/G:top/btm │ y:curl │ h:history │ q:quit"
+			statusLine = " Enter:send │ 1:body 2:hdr 3:time │ p:pretty │ f:find │ w:wrap │ y:curl │ h:history │ q:quit"
 		default:
 			statusLine = fmt.Sprintf(" env:%s │ tab:switch │ /:search │ ctrl+e:env │ q:quit", envLabel)
 		}

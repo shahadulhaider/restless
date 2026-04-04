@@ -208,7 +208,8 @@ Every response includes a timing waterfall: DNS, TCP connect, TLS handshake, tim
 | Key | Action |
 |-----|--------|
 | `Enter` / `ctrl+r` | Send request |
-| `1` / `2` / `3` | Switch tabs (Headers / Body / Timing) |
+| `1` / `2` / `3` | Switch tabs (Body / Headers / Timing) |
+| `p` | Toggle pretty-print / raw |
 | `j` / `k` | Scroll line by line |
 | `ctrl+d` / `ctrl+u` | Scroll half page down / up |
 | `g` / `G` | Jump to top / bottom |

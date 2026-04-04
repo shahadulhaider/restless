@@ -33,6 +33,18 @@ func ImportOpenAPI(specPath string, opts ImportOptions) error {
 	}
 
 	baseURL := doc.baseURL()
+
+	// If base URL is empty or just "/" (common with FastAPI), use {{baseUrl}} variable
+	// and generate an http-client.env.json with the original server URL
+	if baseURL == "" || baseURL == "/" {
+		baseURL = "{{baseUrl}}"
+		writeOpenAPIEnvFile(outDir, doc)
+	} else if !strings.HasPrefix(baseURL, "http") {
+		// Relative path like "/api/v1" — prefix with {{baseUrl}}
+		writeOpenAPIEnvFile(outDir, doc)
+		baseURL = "{{baseUrl}}" + baseURL
+	}
+
 	colName := sanitizeName(doc.Info.Title)
 	if colName == "" {
 		colName = "api"
@@ -303,6 +315,37 @@ type openAPISchema struct {
 	Type       string                    `json:"type" yaml:"type"`
 	Properties map[string]*openAPISchema `json:"properties" yaml:"properties"`
 	Example    interface{}               `json:"example" yaml:"example"`
+}
+
+// writeOpenAPIEnvFile generates http-client.env.json with baseUrl from the spec's servers.
+func writeOpenAPIEnvFile(outDir string, doc *openAPIDoc) {
+	serverURL := "http://localhost:8000"
+	if len(doc.Servers) > 0 && doc.Servers[0].URL != "" && doc.Servers[0].URL != "/" {
+		serverURL = doc.Servers[0].URL
+	} else if doc.Host != "" {
+		scheme := "https"
+		if len(doc.Schemes) > 0 {
+			scheme = doc.Schemes[0]
+		}
+		serverURL = scheme + "://" + doc.Host
+		if doc.BasePath != "" && doc.BasePath != "/" {
+			serverURL += doc.BasePath
+		}
+	}
+
+	envData := map[string]map[string]string{
+		"dev": {"baseUrl": serverURL},
+	}
+	out, err := json.MarshalIndent(envData, "", "  ")
+	if err != nil {
+		return
+	}
+	envPath := filepath.Join(outDir, "http-client.env.json")
+	// Don't overwrite existing env file
+	if _, err := os.Stat(envPath); err == nil {
+		return
+	}
+	_ = os.WriteFile(envPath, out, 0644)
 }
 
 func parseOpenAPIDoc(data []byte, path string) (*openAPIDoc, error) {

@@ -201,6 +201,7 @@ func runCmd() *cobra.Command {
 	var dataFile string
 	var iterations int
 	var delayMs int
+	var outputFormat string
 
 	cmd := &cobra.Command{
 		Use:   "run <file.http>",
@@ -232,6 +233,7 @@ Exit code is 1 if any request fails or any assertion fails.`,
 				DataFile:   dataFile,
 				Iterations: iterations,
 				Delay:      time.Duration(delayMs) * time.Millisecond,
+				Format:     runner.OutputFormat(outputFormat),
 			}
 			result, err := runner.Run(cfg)
 			if err != nil {
@@ -251,6 +253,7 @@ Exit code is 1 if any request fails or any assertion fails.`,
 	cmd.Flags().StringVar(&dataFile, "data", "", "CSV or JSON data file for parameterized runs")
 	cmd.Flags().IntVar(&iterations, "iterations", 0, "Run only first N data rows (0 = all)")
 	cmd.Flags().IntVar(&delayMs, "delay", 0, "Delay between iterations in milliseconds")
+	cmd.Flags().StringVar(&outputFormat, "format", "text", "Output format: text, json, junit")
 	return cmd
 }
 

@@ -273,6 +273,7 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.resp.Request.Name != "" {
 				m.chainCtx.StoreResponse(msg.resp.Request.Name, msg.resp)
 			}
+			m.browser.RecordStatus(msg.resp.Request, msg.resp.StatusCode)
 		}
 		var cmd tea.Cmd
 		m.detail, cmd = m.detail.Update(msg)

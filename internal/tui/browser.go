@@ -36,18 +36,19 @@ type RequestSelected struct {
 }
 
 type BrowserModel struct {
-	collection *model.Collection
-	items      []BrowserItem
-	cursor     int
-	expanded   map[string]bool
-	selected   *model.Request
-	height     int
-	width      int
-	offset     int
+	collection    *model.Collection
+	items         []BrowserItem
+	cursor        int
+	expanded      map[string]bool
+	selected      *model.Request
+	height        int
+	width         int
+	offset        int
+	lastStatus    map[string]int // request key → last HTTP status code
 }
 
 func NewBrowserModel() BrowserModel {
-	return BrowserModel{expanded: make(map[string]bool)}
+	return BrowserModel{expanded: make(map[string]bool), lastStatus: make(map[string]int)}
 }
 
 func LoadCollection(rootDir string) (*model.Collection, error) {
@@ -174,6 +175,17 @@ func requestLabel(req *model.Request) string {
 	return req.Method + " " + req.URL
 }
 
+// RecordStatus stores the last response status for a request.
+func (m *BrowserModel) RecordStatus(req *model.Request, statusCode int) {
+	if req != nil {
+		m.lastStatus[requestKey(req)] = statusCode
+	}
+}
+
+func requestKey(req *model.Request) string {
+	return req.SourceFile + ":" + fmt.Sprintf("%d", req.SourceLine)
+}
+
 // CurrentItem returns the BrowserItem under the cursor, or nil.
 func (m *BrowserModel) CurrentItem() *BrowserItem {
 	if m.cursor < len(m.items) {
@@ -236,6 +248,16 @@ func (m BrowserModel) View() string {
 	}
 
 	var sb strings.Builder
+
+	// Collection stats
+	if m.collection != nil {
+		reqCount := 0
+		for _, f := range m.collection.Files {
+			reqCount += len(f.Requests)
+		}
+		sb.WriteString(dimStyle.Render(fmt.Sprintf("%d reqs │ %d files", reqCount, len(m.collection.Files))))
+		sb.WriteString("\n")
+	}
 	end := m.offset + m.height
 	if end > len(m.items) {
 		end = len(m.items)
@@ -262,7 +284,18 @@ func (m BrowserModel) View() string {
 			if item.Request.Name != "" {
 				urlPart = " " + item.Request.Name
 			}
-			line = indent + colored + urlPart
+			// Status indicator from last response
+			statusDot := ""
+			if code, ok := m.lastStatus[requestKey(item.Request)]; ok {
+				if code >= 200 && code < 300 {
+					statusDot = lipgloss.NewStyle().Foreground(lipgloss.Color("#4CAF50")).Render("● ")
+				} else if code >= 400 {
+					statusDot = lipgloss.NewStyle().Foreground(lipgloss.Color("#F44336")).Render("● ")
+				} else {
+					statusDot = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFF00")).Render("● ")
+				}
+			}
+			line = indent + statusDot + colored + urlPart
 		}
 
 		if i == m.cursor {

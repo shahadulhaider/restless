@@ -112,11 +112,14 @@ restless import openapi <spec>          # Import OpenAPI/Swagger
 
 | Guide | Description |
 |-------|-------------|
-| [Getting Started](docs/getting-started.md) | First collection, environments, CI/CD |
-| [.http File Format](docs/http-format.md) | Full syntax reference, variables, assertions |
-| [All Keybindings](docs/keybindings.md) | Complete keyboard reference |
-| [Importing Collections](docs/importing.md) | Postman, Insomnia, Bruno, curl, OpenAPI |
-| [Code Generation](docs/code-generation.md) | Python, JS, Go, Java, Ruby, HTTPie, curl, PowerShell |
+| [Getting Started](https://github.com/shahadulhaider/restless/wiki/Getting-Started) | First collection, environments, CI/CD |
+| [.http File Format](https://github.com/shahadulhaider/restless/wiki/HTTP-File-Format) | Full syntax reference, variables, assertions |
+| [All Keybindings](https://github.com/shahadulhaider/restless/wiki/Keybindings) | Complete keyboard reference |
+| [Environments](https://github.com/shahadulhaider/restless/wiki/Environments) | Inline vars, env files, dynamic vars |
+| [Assertions](https://github.com/shahadulhaider/restless/wiki/Assertions) | Response assertions for CI/CD |
+| [Importing Collections](https://github.com/shahadulhaider/restless/wiki/Importing-Collections) | Postman, Insomnia, Bruno, curl, OpenAPI |
+| [Code Generation](https://github.com/shahadulhaider/restless/wiki/Code-Generation) | Python, JS, Go, Java, Ruby, HTTPie, curl, PowerShell |
+| [FAQ](https://github.com/shahadulhaider/restless/wiki/FAQ) | Common questions and troubleshooting |
 
 ## Contributing
 

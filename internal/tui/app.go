@@ -53,6 +53,7 @@ func setStatus(text string) (string, tea.Cmd) {
 type App struct {
 	rootDir       string
 	width, height int
+	splitPct      int // browser width as percentage (10-70, default 30)
 	focus         Pane
 	browser       BrowserModel
 	detail        DetailModel
@@ -82,6 +83,7 @@ func New(rootDir string) App {
 	cookies := engine.NewCookieManager()
 	return App{
 		rootDir:   rootDir,
+		splitPct:  30,
 		browser:   NewBrowserModel(),
 		detail:    NewDetailModel(rootDir, chainCtx, cookies),
 		search:    NewSearchModel(),
@@ -113,7 +115,7 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		browserWidth := m.width * 3 / 10
+		browserWidth := m.width * m.splitPct / 100
 		detailWidth := m.width - browserWidth
 		var bc, dc tea.Cmd
 		m.browser, bc = m.browser.Update(tea.WindowSizeMsg{Width: browserWidth, Height: m.height - 1})
@@ -337,6 +339,16 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.help.height = m.height
 			m.showHelp = true
 			return m, nil
+		case "ctrl+left", "[":
+			if m.splitPct > 15 {
+				m.splitPct -= 5
+			}
+			return m, nil
+		case "ctrl+right", "]":
+			if m.splitPct < 65 {
+				m.splitPct += 5
+			}
+			return m, nil
 		case "q", "ctrl+c":
 			return m, tea.Quit
 		case "tab":
@@ -356,6 +368,7 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "n":
 			// Create new request
 			m.editor = NewEditorModel()
+			m.editor.SetAvailableVars(m.collectAvailableVars())
 			m.editingReq = nil
 			m.showEditor = true
 			return m, nil
@@ -375,6 +388,7 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				// No $EDITOR set — fall back to internal editor
 				m.editor = NewEditorModelFromRequest(*sel)
+				m.editor.SetAvailableVars(m.collectAvailableVars())
 				m.editingReq = sel
 				m.showEditor = true
 			}
@@ -383,6 +397,7 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Always open internal editor
 			if sel := m.browser.selected; sel != nil {
 				m.editor = NewEditorModelFromRequest(*sel)
+				m.editor.SetAvailableVars(m.collectAvailableVars())
 				m.editingReq = sel
 				m.showEditor = true
 			}
@@ -459,7 +474,7 @@ func (m App) View() tea.View {
 		return tea.NewView("")
 	}
 
-	browserWidth := m.width * 3 / 10
+	browserWidth := m.width * m.splitPct / 100
 	detailWidth := m.width - browserWidth - 4
 
 	browserStyle := paneStyle
@@ -603,6 +618,26 @@ func (m App) helpContext() string {
 		return "detail-request"
 	}
 	return ""
+}
+
+// collectAvailableVars gathers variable names from env + file vars for auto-complete.
+func (m App) collectAvailableVars() []string {
+	seen := make(map[string]bool)
+	var vars []string
+	for k := range m.envVars {
+		if !seen[k] {
+			vars = append(vars, k)
+			seen[k] = true
+		}
+	}
+	// Add common dynamic vars
+	for _, dv := range []string{"$uuid", "$timestamp", "$isoTimestamp", "$date", "$randomInt", "$randomEmail"} {
+		if !seen[dv] {
+			vars = append(vars, dv)
+			seen[dv] = true
+		}
+	}
+	return vars
 }
 
 // buildEditorCmd creates an *exec.Cmd for the given editor binary and file path.

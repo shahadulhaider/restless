@@ -697,6 +697,16 @@ func (m DetailModel) View() string {
 			sb.WriteString("\n")
 			sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#FF9800")).Render("⚠ script: " + m.response.ScriptError))
 		}
+		// JSON path indicator
+		if m.respFolds[0] && len(m.response.Body) > 0 && strings.Contains(strings.ToLower(m.response.ContentType), "json") {
+			body := string(m.response.Body)
+			off := m.respOffset
+			path := jsonLineToPath(body, off)
+			if path != "$" {
+				sb.WriteString("\n")
+				sb.WriteString(dimStyle.Render("  " + path))
+			}
+		}
 		sb.WriteString("\n\n")
 	} else if m.request != nil {
 		method := lipgloss.NewStyle().Foreground(methodColor(m.request.Method)).Bold(true).Render(m.request.Method)
@@ -1006,9 +1016,17 @@ func (m DetailModel) renderTextContent(body string) string {
 	return sb.String()
 }
 
+const maxBodyDisplay = 512 * 1024 // 512 KB display limit
+
 func (m DetailModel) renderResponseBodyContent() string {
 	if len(m.response.Body) == 0 {
 		return dimStyle.Render("  (empty body)")
+	}
+
+	// Size warning for large responses
+	if len(m.response.Body) > maxBodyDisplay {
+		return dimStyle.Render(fmt.Sprintf("  Response body is %s — too large for inline display.\n  Use yb to copy body to clipboard, or p for raw view.",
+			formatSize(len(m.response.Body))))
 	}
 
 	var raw string
@@ -1369,6 +1387,17 @@ func highlightLine(line, query string, style lipgloss.Style) string {
 		pos = matchEnd
 	}
 	return sb.String()
+}
+
+func formatSize(bytes int) string {
+	switch {
+	case bytes < 1024:
+		return fmt.Sprintf("%d B", bytes)
+	case bytes < 1024*1024:
+		return fmt.Sprintf("%.1f KB", float64(bytes)/1024)
+	default:
+		return fmt.Sprintf("%.1f MB", float64(bytes)/(1024*1024))
+	}
 }
 
 func max(a, b int) int {

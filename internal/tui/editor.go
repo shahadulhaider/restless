@@ -56,6 +56,12 @@ type EditorModel struct {
 	width  int
 	height int
 
+	// Variable auto-complete
+	showComplete    bool
+	completions     []string
+	completeIdx     int
+	availableVars   []string // set externally from env + file vars
+
 	name         lineEdit
 	methodIdx    int
 	url          lineEdit
@@ -118,6 +124,11 @@ func NewEditorModelFromRequest(req model.Request) EditorModel {
 	return m
 }
 
+// SetAvailableVars provides the list of variable names for auto-complete.
+func (m *EditorModel) SetAvailableVars(vars []string) {
+	m.availableVars = vars
+}
+
 func (m EditorModel) Request() model.Request {
 	req := model.Request{
 		Name:   strings.TrimSpace(m.name.String()),
@@ -155,6 +166,32 @@ func (m EditorModel) Update(msg tea.Msg) (EditorModel, tea.Cmd) {
 	case tea.KeyPressMsg:
 		key := msg.String()
 
+		// Handle auto-complete
+		if m.showComplete {
+			switch key {
+			case "up":
+				if m.completeIdx > 0 {
+					m.completeIdx--
+				}
+				return m, nil
+			case "down":
+				if m.completeIdx < len(m.completions)-1 {
+					m.completeIdx++
+				}
+				return m, nil
+			case "enter", "tab":
+				if m.completeIdx < len(m.completions) {
+					m.insertCompletion(m.completions[m.completeIdx])
+				}
+				m.showComplete = false
+				return m, nil
+			case "esc":
+				m.showComplete = false
+				return m, nil
+			}
+			m.showComplete = false
+		}
+
 		switch key {
 		case "ctrl+s":
 			req := m.Request()
@@ -162,6 +199,9 @@ func (m EditorModel) Update(msg tea.Msg) (EditorModel, tea.Cmd) {
 		case "esc":
 			return m, func() tea.Msg { return EditorCancelled{} }
 		case "tab":
+			if m.tryAutoComplete() {
+				return m, nil
+			}
 			m = m.focusNext()
 			return m, nil
 		case "shift+tab":
@@ -368,8 +408,34 @@ func (m EditorModel) View() string {
 	sb.WriteString(m.renderToggleField("@no-cookie-jar", m.noCookieJar, m.focus == fieldNoCookieJar))
 	sb.WriteString(m.renderLineEditField("@timeout (sec)", &m.timeoutSecs, m.focus == fieldTimeout))
 
+	// Auto-complete popup
+	if m.showComplete && len(m.completions) > 0 {
+		sb.WriteString("\n")
+		completeStyle := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colorBorderActive).Padding(0, 1)
+		var csb strings.Builder
+		csb.WriteString(dimStyle.Render("Variables:") + "\n")
+		maxShow := 8
+		if len(m.completions) < maxShow {
+			maxShow = len(m.completions)
+		}
+		for i := 0; i < maxShow; i++ {
+			prefix := "  "
+			if i == m.completeIdx {
+				prefix = "> "
+				csb.WriteString(lipgloss.NewStyle().Foreground(colorBorderActive).Render(prefix+"{{"+m.completions[i]+"}}") + "\n")
+			} else {
+				csb.WriteString(prefix + "{{" + m.completions[i] + "}}\n")
+			}
+		}
+		if len(m.completions) > maxShow {
+			csb.WriteString(dimStyle.Render(fmt.Sprintf("  ... +%d more", len(m.completions)-maxShow)) + "\n")
+		}
+		csb.WriteString(dimStyle.Render("  ↑/↓: select  Tab/Enter: insert  Esc: dismiss"))
+		sb.WriteString(completeStyle.Render(csb.String()))
+	}
+
 	sb.WriteString("\n")
-	sb.WriteString(dimStyle.Render("Tab: next  Ctrl+S: save  Esc: cancel  ←/→: move  Ctrl+A/E: home/end  Ctrl+W: del word  Ctrl+U: clear"))
+	sb.WriteString(dimStyle.Render("Tab: next/complete  Ctrl+S: save  Esc: cancel  ←/→: move  Ctrl+W: del word"))
 
 	return sb.String()
 }
@@ -456,6 +522,76 @@ func (m EditorModel) renderToggleField(label string, value, focused bool) string
 		check = "[x]"
 	}
 	return fmt.Sprintf("%s%s %s\n", indicator, labelStyle.Render(label), check)
+}
+
+// tryAutoComplete checks if the current field ends with "{{" and shows completions.
+func (m *EditorModel) tryAutoComplete() bool {
+	le := m.currentLineEdit()
+	if le == nil || len(m.availableVars) == 0 {
+		return false
+	}
+	text := le.String()
+	// Check if cursor is after "{{" with optional partial var name
+	idx := strings.LastIndex(text[:le.pos], "{{")
+	if idx < 0 {
+		return false
+	}
+	partial := text[idx+2 : le.pos]
+	// Filter variables by partial match
+	var matches []string
+	lower := strings.ToLower(partial)
+	for _, v := range m.availableVars {
+		if partial == "" || strings.Contains(strings.ToLower(v), lower) {
+			matches = append(matches, v)
+		}
+	}
+	if len(matches) == 0 {
+		return false
+	}
+	m.completions = matches
+	m.completeIdx = 0
+	m.showComplete = true
+	return true
+}
+
+// insertCompletion replaces the partial "{{..." with "{{varName}}" in the current field.
+func (m *EditorModel) insertCompletion(varName string) {
+	le := m.currentLineEdit()
+	if le == nil {
+		return
+	}
+	text := le.String()
+	idx := strings.LastIndex(text[:le.pos], "{{")
+	if idx < 0 {
+		return
+	}
+	// Replace from {{ to cursor with {{varName}}
+	before := text[:idx]
+	after := text[le.pos:]
+	newText := before + "{{" + varName + "}}" + after
+	le.Set(newText)
+	le.pos = len([]rune(before)) + len([]rune("{{"+varName+"}}"))
+}
+
+// currentLineEdit returns the lineEdit for the currently focused text field.
+func (m *EditorModel) currentLineEdit() *lineEdit {
+	switch m.focus {
+	case fieldName:
+		return &m.name
+	case fieldURL:
+		return &m.url
+	case fieldTimeout:
+		return &m.timeoutSecs
+	case fieldHeaderKey:
+		if m.headerCursor < len(m.headers) {
+			return &m.headers[m.headerCursor].key
+		}
+	case fieldHeaderValue:
+		if m.headerCursor < len(m.headers) {
+			return &m.headers[m.headerCursor].value
+		}
+	}
+	return nil
 }
 
 func isDigit(r rune) bool {

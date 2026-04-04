@@ -70,7 +70,7 @@ restless .
 
 ## Environments
 
-Create `http-client.env.json` in your project root:
+Create `restless.env.json` in your project root:
 
 ```json
 {

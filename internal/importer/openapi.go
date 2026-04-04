@@ -340,7 +340,7 @@ func writeOpenAPIEnvFile(outDir string, doc *openAPIDoc) {
 	if err != nil {
 		return
 	}
-	envPath := filepath.Join(outDir, "http-client.env.json")
+	envPath := filepath.Join(outDir, "restless.env.json")
 	// Don't overwrite existing env file
 	if _, err := os.Stat(envPath); err == nil {
 		return

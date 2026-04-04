@@ -39,6 +39,7 @@ type envVarsMsg struct {
 }
 
 type collectionReloadMsg struct{}
+type envsReloadMsg struct{}
 type statusMsg struct{ text string }
 type clearStatusMsg struct{}
 type editorOpenedInExternalEditor struct{ filePath string }
@@ -138,6 +139,7 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case envsLoaded:
 		m.envFile = msg.envFile
 		m.envSwitch.SetEnvFile(msg.envFile, m.currentEnv)
+		m.envSwitch.SetHasFile(parser.EnvFilePath(m.rootDir) != "")
 		return m, nil
 
 	case collectionReloadMsg:
@@ -245,6 +247,76 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+
+	case EnvCreateRequested:
+		m.showEnvSwitch = false
+		envPath := filepath.Join(m.rootDir, "restless.env.json")
+		if _, err := os.Stat(envPath); err == nil {
+			m.statusText, _ = setStatus("restless.env.json already exists — use 'e' to edit")
+			return m, nil
+		}
+		// Write boilerplate
+		boilerplate := `{
+  "$shared": {
+    "baseUrl": "https://api.example.com"
+  },
+  "dev": {
+    "baseUrl": "http://localhost:8000",
+    "token": "dev-token"
+  },
+  "staging": {
+    "baseUrl": "https://staging.example.com",
+    "token": "staging-token"
+  },
+  "prod": {
+    "token": "prod-token"
+  }
+}
+`
+		if err := os.WriteFile(envPath, []byte(boilerplate), 0644); err != nil {
+			m.statusText, _ = setStatus("Error creating env file: " + err.Error())
+			return m, nil
+		}
+		// Open in $EDITOR
+		editorBin := os.Getenv("EDITOR")
+		if editorBin == "" {
+			editorBin = os.Getenv("VISUAL")
+		}
+		if editorBin != "" {
+			c := buildEditorCmd(editorBin, envPath)
+			return m, tea.ExecProcess(c, func(err error) tea.Msg {
+				return envsReloadMsg{}
+			})
+		}
+		m.statusText, _ = setStatus("Created restless.env.json — set $EDITOR to edit")
+		return m, func() tea.Msg { return envsReloadMsg{} }
+
+	case EnvEditRequested:
+		m.showEnvSwitch = false
+		envPath := parser.EnvFilePath(m.rootDir)
+		if envPath == "" {
+			m.statusText, _ = setStatus("No env file found — press 'c' to create one")
+			return m, nil
+		}
+		editorBin := os.Getenv("EDITOR")
+		if editorBin == "" {
+			editorBin = os.Getenv("VISUAL")
+		}
+		if editorBin == "" {
+			m.statusText, _ = setStatus("$EDITOR not set — can't open env file")
+			return m, nil
+		}
+		c := buildEditorCmd(editorBin, envPath)
+		return m, tea.ExecProcess(c, func(err error) tea.Msg {
+			return envsReloadMsg{}
+		})
+
+	case envsReloadMsg:
+		rootDir := m.rootDir
+		return m, func() tea.Msg {
+			ef, _ := parser.LoadEnvironments(rootDir)
+			return envsLoaded{envFile: ef}
+		}
 
 	case EnvChanged:
 		m.currentEnv = msg.Name

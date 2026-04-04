@@ -13,6 +13,12 @@ type EnvChanged struct {
 	Name string
 }
 
+// EnvCreateRequested is emitted when user wants to create a new env file.
+type EnvCreateRequested struct{}
+
+// EnvEditRequested is emitted when user wants to edit the env file in $EDITOR.
+type EnvEditRequested struct{}
+
 type EnvModel struct {
 	envFile  *model.EnvironmentFile
 	envNames []string
@@ -20,6 +26,7 @@ type EnvModel struct {
 	cursor   int
 	width    int
 	height   int
+	hasFile  bool // whether an env file exists on disk
 }
 
 func NewEnvModel() EnvModel {
@@ -34,6 +41,7 @@ func (m *EnvModel) SetEnvFile(ef *model.EnvironmentFile, current string) {
 	m.envFile = ef
 	m.current = current
 	m.envNames = []string{"(no environment)"}
+	m.hasFile = ef != nil && len(ef.Environments) > 0
 	if ef != nil {
 		for name := range ef.Environments {
 			m.envNames = append(m.envNames, name)
@@ -45,6 +53,10 @@ func (m *EnvModel) SetEnvFile(ef *model.EnvironmentFile, current string) {
 			break
 		}
 	}
+}
+
+func (m *EnvModel) SetHasFile(has bool) {
+	m.hasFile = has
 }
 
 func (m EnvModel) Update(msg tea.Msg) (EnvModel, tea.Cmd) {
@@ -71,6 +83,12 @@ func (m EnvModel) Update(msg tea.Msg) (EnvModel, tea.Cmd) {
 				}
 				m.current = name
 				return m, func() tea.Msg { return EnvChanged{Name: name} }
+			}
+		case "c":
+			return m, func() tea.Msg { return EnvCreateRequested{} }
+		case "e":
+			if m.hasFile {
+				return m, func() tea.Msg { return EnvEditRequested{} }
 			}
 		}
 	}
@@ -100,8 +118,20 @@ func (m EnvModel) View() string {
 		}
 		sb.WriteString(line + "\n")
 	}
-	if len(m.envNames) == 0 {
-		sb.WriteString(dimStyle.Render("(no environments found)"))
+	if len(m.envNames) <= 1 {
+		sb.WriteString("\n" + dimStyle.Render("No environments configured."))
 	}
+
+	// Keybinding hints
+	sb.WriteString("\n")
+	var hints []string
+	hints = append(hints, "Enter: select")
+	if m.hasFile {
+		hints = append(hints, "e: edit env file")
+	}
+	hints = append(hints, "c: create new env file")
+	hints = append(hints, "Esc: close")
+	sb.WriteString(dimStyle.Render(strings.Join(hints, "  │  ")))
+
 	return sb.String()
 }

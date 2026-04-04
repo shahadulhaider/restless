@@ -23,7 +23,7 @@ Export your Insomnia workspace (v4 JSON format), then:
 restless import insomnia export.json --output ./my-api
 ```
 
-Folder structure is preserved. Environment variables are converted to `http-client.env.json`.
+Folder structure is preserved. Environment variables are converted to `restless.env.json`.
 
 ## From Bruno
 
@@ -33,7 +33,7 @@ Point at your Bruno collection directory:
 restless import bruno ./my-bruno-collection --output ./my-api
 ```
 
-`.bru` files are converted to `.http` files. Environment files are converted to `http-client.env.json`.
+`.bru` files are converted to `.http` files. Environment files are converted to `restless.env.json`.
 
 ## From curl Commands
 
@@ -68,10 +68,10 @@ restless import openapi openapi.json --output ./my-api
 # Fix base URL (FastAPI uses relative paths)
 cd my-api
 echo '@baseUrl = http://localhost:8000' | cat - *.http > /tmp/fix && mv /tmp/fix *.http
-# Or create http-client.env.json with baseUrl
+# Or create restless.env.json with baseUrl
 ```
 
-Create `http-client.env.json`:
+Create `restless.env.json`:
 ```json
 {
   "dev": {

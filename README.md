@@ -62,7 +62,7 @@ restless run api.http
 - **Interactive TUI** — browse collections, send requests, inspect responses with collapsible accordion view
 - **`.http` files** — plain text, Git-friendly, JetBrains-compatible
 - **Request/Response toggle** — `r`/`s` to switch views, both with fold/scroll/search/yank
-- **Environments** — `http-client.env.json` with `$shared` + per-env variables, switch with `Ctrl+E`
+- **Environments** — `restless.env.json` with `$shared` + per-env variables, switch with `Ctrl+E`
 - **Inline variables** — `@baseUrl = http://localhost:8000` right in your `.http` file
 - **Dynamic variables** — `{{$uuid}}`, `{{$timestamp}}`, `{{$randomInt}}`, `{{$date}}`, and more
 - **Request chaining** — `{{login.response.body.token}}` passes data between requests

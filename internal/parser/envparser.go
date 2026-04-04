@@ -23,14 +23,47 @@ func generateUUID() string {
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
 
+// EnvFilePath returns the path to the env file found in dir.
+// Prefers restless.env.json over http-client.env.json.
+func EnvFilePath(dir string) string {
+	restlessPath := filepath.Join(dir, "restless.env.json")
+	if _, err := os.Stat(restlessPath); err == nil {
+		return restlessPath
+	}
+	httpClientPath := filepath.Join(dir, "http-client.env.json")
+	if _, err := os.Stat(httpClientPath); err == nil {
+		return httpClientPath
+	}
+	return "" // no env file found
+}
+
+// PrivateEnvFilePath returns the path to the private env file found in dir.
+func PrivateEnvFilePath(dir string) string {
+	restlessPath := filepath.Join(dir, "restless.private.env.json")
+	if _, err := os.Stat(restlessPath); err == nil {
+		return restlessPath
+	}
+	httpClientPath := filepath.Join(dir, "http-client.private.env.json")
+	if _, err := os.Stat(httpClientPath); err == nil {
+		return httpClientPath
+	}
+	return ""
+}
+
 func LoadEnvironments(dir string) (*model.EnvironmentFile, error) {
 	result := &model.EnvironmentFile{
 		Shared:       make(map[string]string),
 		Environments: make(map[string]model.Environment),
 	}
 
-	publicPath := filepath.Join(dir, "http-client.env.json")
-	privatePath := filepath.Join(dir, "http-client.private.env.json")
+	publicPath := EnvFilePath(dir)
+	if publicPath == "" {
+		publicPath = filepath.Join(dir, "restless.env.json") // default for error reporting
+	}
+	privatePath := PrivateEnvFilePath(dir)
+	if privatePath == "" {
+		privatePath = filepath.Join(dir, "restless.private.env.json")
+	}
 
 	publicData, pubErr := parseEnvFile(publicPath)
 	privateData, privErr := parseEnvFile(privatePath)

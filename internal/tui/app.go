@@ -456,7 +456,11 @@ func (m App) View() tea.View {
 		case m.focus == PaneBrowser:
 			statusLine = fmt.Sprintf(" env:%s │ e:edit │ E:form │ n:new │ D:del │ Y:dup │ N:file │ F:folder │ R:rename │ ctrl+e:env │ q:quit", envLabel)
 		case m.focus == PaneDetail:
-			statusLine = " Enter:send │ space:fold │ zo/zc/zR/zM:folds │ y:yank │ p:pretty │ f:find │ h:hist │ q:quit"
+			if m.detail.response != nil {
+				statusLine = " 1/2/3:sections │ space:fold │ y:yank(b/h/a/c) │ p:pretty │ f:find │ z:fold │ h:hist │ Enter:send"
+			} else {
+				statusLine = " Enter:send │ e:edit │ h:history │ q:quit"
+			}
 		default:
 			statusLine = fmt.Sprintf(" env:%s │ tab:switch │ /:search │ ctrl+e:env │ q:quit", envLabel)
 		}

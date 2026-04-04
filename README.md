@@ -67,6 +67,7 @@ restless run api.http
 - **Dynamic variables** — `{{$uuid}}`, `{{$timestamp}}`, `{{$randomInt}}`, `{{$date}}`, and more
 - **Request chaining** — `{{login.response.body.token}}` passes data between requests
 - **Response assertions** — `# @assert status == 200` for CI/CD testing
+- **Collection runner** — `--data users.csv` to run requests with parameterized data from CSV/JSON
 - **Code generation** — `yg` + key to copy as Python, JavaScript, Go, Java, Ruby, HTTPie, curl, PowerShell
 - **Import from anywhere** — Postman, Insomnia, Bruno, curl commands, OpenAPI/Swagger
 - **$EDITOR integration** — press `e` to edit in nvim/vim/code
@@ -101,6 +102,7 @@ Press `?` in the TUI for the full reference. Press `F1` for context-sensitive he
 ```bash
 restless [directory]                    # Launch TUI
 restless run <file> [--env name]        # Run headless (CI/CD)
+restless run <file> --data data.csv    # Parameterized run with data file
 restless import postman <file>          # Import Postman collection
 restless import insomnia <file>         # Import Insomnia export
 restless import bruno <dir>             # Import Bruno collection

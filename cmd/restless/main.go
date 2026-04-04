@@ -4,13 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
 
-	"github.com/shahadulhaider/restless/internal/assert"
-	"github.com/shahadulhaider/restless/internal/engine"
 	"github.com/shahadulhaider/restless/internal/importer"
-	"github.com/shahadulhaider/restless/internal/parser"
+	"github.com/shahadulhaider/restless/internal/runner"
 	"github.com/shahadulhaider/restless/internal/tui"
 )
 
@@ -199,6 +198,9 @@ func runCmd() *cobra.Command {
 	var failFast bool
 	var insecure bool
 	var proxyURL string
+	var dataFile string
+	var iterations int
+	var delayMs int
 
 	cmd := &cobra.Command{
 		Use:   "run <file.http>",
@@ -208,136 +210,34 @@ func runCmd() *cobra.Command {
 Useful for CI/CD pipelines and scripting. Supports environment variables,
 request chaining, and response assertions (# @assert).
 
+Use --data to run requests multiple times with different data from a CSV or JSON file.
+
 Examples:
   restless run api.http
   restless run api.http --env production
   restless run api.http --env dev --fail-fast
+  restless run api.http --data users.csv --env dev
+  restless run api.http --data test-cases.json --iterations 5
   restless run api.http --insecure --proxy http://proxy:8080
 
 Exit code is 1 if any request fails or any assertion fails.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			filePath := args[0]
-			rootDir := filepath.Dir(filePath)
-
-			reqs, err := parser.ParseFile(filePath)
+			cfg := runner.RunConfig{
+				FilePath:   args[0],
+				EnvName:    envName,
+				FailFast:   failFast,
+				Insecure:   insecure,
+				ProxyURL:   proxyURL,
+				DataFile:   dataFile,
+				Iterations: iterations,
+				Delay:      time.Duration(delayMs) * time.Millisecond,
+			}
+			result, err := runner.Run(cfg)
 			if err != nil {
-				return fmt.Errorf("parsing %s: %w", filePath, err)
+				return err
 			}
-
-			var envVars map[string]string
-			if envName != "" {
-				envFile, loadErr := parser.LoadEnvironments(rootDir)
-				if loadErr == nil && envFile != nil {
-					envVars, _ = parser.ResolveEnvironment(envFile, envName)
-				}
-			}
-			if envVars == nil {
-				envVars = make(map[string]string)
-			}
-
-			// Merge inline file variables
-			fileVars, _ := parser.ExtractFileVariablesFromFile(filePath)
-			for k, v := range fileVars {
-				if _, exists := envVars[k]; !exists {
-					envVars[k] = v
-				}
-			}
-
-			chainCtx := parser.NewChainContext()
-			cookies := engine.NewCookieManager()
-
-			for i := range reqs {
-			// Apply CLI-level overrides
-			if insecure {
-				reqs[i].Metadata.Insecure = true
-			}
-			if proxyURL != "" {
-				reqs[i].Metadata.Proxy = proxyURL
-			}
-		}
-
-		totalRequests := 0
-		passedRequests := 0
-		totalAssertions := 0
-		passedAssertions := 0
-		anyFailed := false
-
-		for _, req := range reqs {
-				totalRequests++
-				resolved, _ := parser.ResolveRequest(&req, envVars, chainCtx)
-				loaded, loadErr := parser.LoadFileBody(resolved, rootDir)
-				if loadErr != nil {
-					loaded = resolved
-				}
-
-				jar := cookies.JarForEnv(envName)
-				resp, execErr := engine.ExecuteWithJar(loaded, jar)
-				if execErr != nil {
-					fmt.Fprintf(os.Stderr, "\033[31m✗\033[0m %s %s: %v\n", loaded.Method, loaded.URL, execErr)
-					anyFailed = true
-					if failFast {
-						return execErr
-					}
-					continue
-				}
-
-				if loaded.Name != "" {
-					chainCtx.StoreResponse(loaded.Name, resp)
-				}
-
-				// Run assertions
-				results := assert.EvaluateAll(loaded, resp)
-				resp.AssertionResults = results
-				passed := assert.CountPassed(results)
-				allOk := assert.AllPassed(results)
-				totalAssertions += len(results)
-				passedAssertions += passed
-
-				name := loaded.Name
-				if name == "" {
-					name = loaded.Method + " " + loaded.URL
-				}
-
-				if len(results) == 0 {
-					fmt.Fprintf(os.Stdout, "\033[32m✓\033[0m %s  %s  %dms\n",
-						name, resp.Status, resp.Timing.Total.Milliseconds())
-					passedRequests++
-				} else if allOk {
-					fmt.Fprintf(os.Stdout, "\033[32m✓\033[0m %s  %s  %dms  (%d/%d passed)\n",
-						name, resp.Status, resp.Timing.Total.Milliseconds(), passed, len(results))
-					passedRequests++
-				} else {
-					fmt.Fprintf(os.Stdout, "\033[31m✗\033[0m %s  %s  %dms\n",
-						name, resp.Status, resp.Timing.Total.Milliseconds())
-					for _, r := range results {
-						if r.Passed {
-							fmt.Fprintf(os.Stdout, "    \033[32m✓\033[0m %s\n", r.Assertion.Raw)
-						} else {
-							msg := fmt.Sprintf("    \033[31m✗\033[0m %s", r.Assertion.Raw)
-							if r.Error != "" {
-								msg += fmt.Sprintf(" (%s)", r.Error)
-							} else {
-								msg += fmt.Sprintf(" (got %s)", r.Actual)
-							}
-							fmt.Fprintln(os.Stdout, msg)
-						}
-					}
-					anyFailed = true
-				}
-
-				if !allOk && failFast {
-					break
-				}
-			}
-
-			if totalAssertions > 0 {
-				fmt.Fprintf(os.Stdout, "\n%d requests | %d passed | %d failed | %d/%d assertions passed\n",
-					totalRequests, passedRequests, totalRequests-passedRequests,
-					passedAssertions, totalAssertions)
-			}
-
-			if anyFailed {
+			if result.AnyFailed {
 				os.Exit(1)
 			}
 			return nil
@@ -348,6 +248,9 @@ Exit code is 1 if any request fails or any assertion fails.`,
 	cmd.Flags().BoolVar(&failFast, "fail-fast", false, "Stop on first error")
 	cmd.Flags().BoolVar(&insecure, "insecure", false, "Skip TLS certificate verification")
 	cmd.Flags().StringVar(&proxyURL, "proxy", "", "HTTP proxy URL (e.g. http://proxy:8080)")
+	cmd.Flags().StringVar(&dataFile, "data", "", "CSV or JSON data file for parameterized runs")
+	cmd.Flags().IntVar(&iterations, "iterations", 0, "Run only first N data rows (0 = all)")
+	cmd.Flags().IntVar(&delayMs, "delay", 0, "Delay between iterations in milliseconds")
 	return cmd
 }
 

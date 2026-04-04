@@ -119,6 +119,7 @@ restless import openapi <spec>          # Import OpenAPI/Swagger
 | [All Keybindings](https://github.com/shahadulhaider/restless/wiki/Keybindings) | Complete keyboard reference |
 | [Environments](https://github.com/shahadulhaider/restless/wiki/Environments) | Inline vars, env files, dynamic vars |
 | [Assertions](https://github.com/shahadulhaider/restless/wiki/Assertions) | Response assertions for CI/CD |
+| [Collection Runner](https://github.com/shahadulhaider/restless/wiki/Collection-Runner) | Parameterized runs with CSV/JSON data |
 | [Importing Collections](https://github.com/shahadulhaider/restless/wiki/Importing-Collections) | Postman, Insomnia, Bruno, curl, OpenAPI |
 | [Code Generation](https://github.com/shahadulhaider/restless/wiki/Code-Generation) | Python, JS, Go, Java, Ruby, HTTPie, curl, PowerShell |
 | [FAQ](https://github.com/shahadulhaider/restless/wiki/FAQ) | Common questions and troubleshooting |

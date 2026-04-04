@@ -69,6 +69,7 @@ type DetailModel struct {
 	expandAll bool
 	pendingZ  bool
 	pendingY  bool
+	pendingYG bool // waiting for language key after yg
 
 	// Body viewer
 	wordWrap     bool
@@ -294,9 +295,19 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 		return m, nil
 	}
 
+	// yg-prefix (code generation)
+	if m.pendingYG {
+		m.pendingYG = false
+		return m.handleCodeGen(key)
+	}
+
 	// y-prefix
 	if m.pendingY {
 		m.pendingY = false
+		if key == "g" {
+			m.pendingYG = true
+			return m, nil
+		}
 		return m.handleYank(key)
 	}
 
@@ -535,6 +546,27 @@ func (m DetailModel) handleYank(key string) (DetailModel, tea.Cmd) {
 	}
 }
 
+// --- Code Generation ---
+
+func (m DetailModel) handleCodeGen(key string) (DetailModel, tea.Cmd) {
+	if m.request == nil {
+		return m, nil
+	}
+
+	gen, ok := exporter.Generators[key]
+	if !ok {
+		return m, nil
+	}
+
+	code := gen.Generate(*m.request)
+	label := gen.Name + " code"
+
+	return m, func() tea.Msg {
+		err := exporter.CopyToClipboard(code)
+		return yankResult{label: label, err: err}
+	}
+}
+
 // --- Search ---
 
 func (m *DetailModel) clearSearch() {
@@ -664,7 +696,10 @@ func (m DetailModel) View() string {
 		sb.WriteString("\n" + dimStyle.Render("z-"))
 	}
 	if m.pendingY {
-		sb.WriteString("\n" + dimStyle.Render("y- (b:body  h:headers  a:all  c:curl)"))
+		sb.WriteString("\n" + dimStyle.Render("y- (b:body  h:headers  a:all  c:curl  g:generate code)"))
+	}
+	if m.pendingYG {
+		sb.WriteString("\n" + dimStyle.Render("yg- (p:python  j:javascript  g:go  v:java  r:ruby  h:httpie  c:curl  w:powershell)"))
 	}
 
 	return sb.String()

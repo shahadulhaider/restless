@@ -169,6 +169,23 @@ GET {{baseUrl}}/me
 Authorization: Bearer {{login.response.body.token}}
 ```
 
+### Code Generation
+
+Generate equivalent code in 8 languages. Press `yg` then a language key:
+
+| Key | Language | Library |
+|-----|----------|---------|
+| `ygp` | Python | `requests` |
+| `ygj` | JavaScript | `fetch` |
+| `ygg` | Go | `net/http` |
+| `ygv` | Java | `HttpClient` |
+| `ygr` | Ruby | `net/http` |
+| `ygh` | HTTPie | CLI |
+| `ygc` | curl | CLI |
+| `ygw` | PowerShell | `Invoke-RestMethod` |
+
+Generated code is copied to clipboard — paste it into your project.
+
 ### Copy as curl
 
 Press `y` on any request to copy it as a `curl` command to your clipboard. Paste it into Slack, docs, or a shell.
@@ -278,6 +295,7 @@ Every response includes a timing waterfall: DNS, TCP connect, TLS handshake, tim
 | `yh` | Copy response headers to clipboard |
 | `ya` | Copy full response to clipboard |
 | `yc` | Copy request as curl to clipboard |
+| `yg` + key | Generate code: `p`ython `j`avascript `g`o `v`java `r`uby `h`ttpie `c`url `w`powershell |
 | `q` / `ctrl+c` | Quit |
 
 ### Browser Pane

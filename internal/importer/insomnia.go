@@ -140,28 +140,8 @@ func ImportInsomnia(collectionPath string, opts ImportOptions) error {
 		}
 	}
 
-	// Write environments if any
-	var envVars []map[string]string
-	var envNames []string
-	for _, r := range export.Resources {
-		if r.Type == "environment" && r.ParentID == workspaceID {
-			vars := make(map[string]string)
-			// Environments store data in a special field; use Data if present via raw decode
-			// For now we handle the common case where variables are passed as name/data pairs
-			// Note: Insomnia environment variables are in the "data" field (not in insomniaResource)
-			// We need a raw decode for that
-			envVars = append(envVars, vars)
-			envNames = append(envNames, r.Name)
-		}
-	}
-
-	// Write environments using raw decode for the data field
-	if err := writeInsomniaEnvs(data, outDir, workspaceID); err != nil {
-		// Non-fatal — environments are optional
-		_ = err
-	}
-	_ = envVars
-	_ = envNames
+	// Write environments using raw decode for the data field (non-fatal)
+	_ = writeInsomniaEnvs(data, outDir, workspaceID)
 
 	return nil
 }

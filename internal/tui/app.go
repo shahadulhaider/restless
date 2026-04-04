@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -39,7 +40,15 @@ type envVarsMsg struct {
 
 type collectionReloadMsg struct{}
 type statusMsg struct{ text string }
+type clearStatusMsg struct{}
 type editorOpenedInExternalEditor struct{ filePath string }
+
+// setStatus sets the status text and returns a command to clear it after 3 seconds.
+func setStatus(text string) (string, tea.Cmd) {
+	return text, tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+		return clearStatusMsg{}
+	})
+}
 
 type App struct {
 	rootDir       string
@@ -138,6 +147,10 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case statusMsg:
 		m.statusText = msg.text
+		return m, nil
+
+	case clearStatusMsg:
+		m.statusText = ""
 		return m, nil
 
 	case RequestSelected:
@@ -246,12 +259,13 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case yankResult:
+		var cmd tea.Cmd
 		if msg.err != nil {
-			m.statusText = "Copy failed: " + msg.err.Error()
+			m.statusText, cmd = setStatus("Copy failed: " + msg.err.Error())
 		} else {
-			m.statusText = "Copied " + msg.label + " to clipboard"
+			m.statusText, cmd = setStatus("Copied " + msg.label + " to clipboard")
 		}
-		return m, nil
+		return m, cmd
 
 	case responseReceived:
 		if msg.resp != nil && msg.resp.Request != nil {

@@ -58,6 +58,8 @@ type DetailModel struct {
 	historyIdx     int
 	diffMode       bool
 	diffIdxA       int
+	showDiff       bool
+	diffText       string
 
 	// Request accordion state
 	reqFolds   [4]bool // Body, Headers, Metadata, Assertions expanded
@@ -201,6 +203,14 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 		m.clearSearch()
 
 	case tea.KeyPressMsg:
+		if m.showDiff {
+			switch msg.String() {
+			case "esc", "q":
+				m.showDiff = false
+				m.showHistory = true
+			}
+			return m, nil
+		}
 		if m.showHistory {
 			return m.updateHistory(msg)
 		}
@@ -242,8 +252,9 @@ func (m DetailModel) updateHistory(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 			m.historyIdx < len(m.historyEntries) {
 			a := &m.historyEntries[m.diffIdxA]
 			b := &m.historyEntries[m.historyIdx]
-			_ = history.Diff(a, b)
+			m.diffText = history.Diff(a, b)
 			m.diffMode = false
+			m.showDiff = true
 		}
 	}
 	return m, nil
@@ -402,7 +413,10 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 						Response: resp,
 						EnvVars:  mergedVars,
 					}
-					_ = script.RunPostResponse(loaded.PostResponseScript, scriptCtx)
+					if scriptErr := script.RunPostResponse(loaded.PostResponseScript, scriptCtx); scriptErr != nil {
+						// Attach script error to response for display
+						resp.ScriptError = scriptErr.Error()
+					}
 				}
 				return responseReceived{resp: resp, err: err}
 			}
@@ -481,6 +495,31 @@ func (m DetailModel) sectionAtOffset() section {
 		}
 	}
 	return sectionBody
+}
+
+func (m DetailModel) diffView() string {
+	var sb strings.Builder
+	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#CDD6F4"))
+	sb.WriteString(title.Render("Response Diff") + "\n\n")
+
+	if m.diffText == "" {
+		sb.WriteString(dimStyle.Render("(no differences)"))
+	} else {
+		addStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#4CAF50"))
+		removeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F44336"))
+		for _, line := range strings.Split(m.diffText, "\n") {
+			if strings.HasPrefix(line, "+") {
+				sb.WriteString(addStyle.Render(line) + "\n")
+			} else if strings.HasPrefix(line, "-") {
+				sb.WriteString(removeStyle.Render(line) + "\n")
+			} else {
+				sb.WriteString(line + "\n")
+			}
+		}
+	}
+
+	sb.WriteString("\n" + dimStyle.Render("Esc: back to history"))
+	return sb.String()
 }
 
 // --- Yank ---
@@ -622,6 +661,9 @@ func (m DetailModel) currentAccordionContent() string {
 // --- View ---
 
 func (m DetailModel) View() string {
+	if m.showDiff {
+		return m.diffView()
+	}
 	if m.showHistory {
 		return m.historyView()
 	}
@@ -651,6 +693,10 @@ func (m DetailModel) View() string {
 	// ── Sticky header ──
 	if m.mode == modeResponse && m.response != nil {
 		sb.WriteString(m.stickyStatus())
+		if m.response.ScriptError != "" {
+			sb.WriteString("\n")
+			sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#FF9800")).Render("⚠ script: " + m.response.ScriptError))
+		}
 		sb.WriteString("\n\n")
 	} else if m.request != nil {
 		method := lipgloss.NewStyle().Foreground(methodColor(m.request.Method)).Bold(true).Render(m.request.Method)
@@ -1270,6 +1316,9 @@ func wrapLines(lines []string, maxWidth int) []string {
 			wrapped = append(wrapped, line)
 			continue
 		}
+		// For lines with ANSI codes, wrap the plain text and discard styling
+		// (wrapping styled text while preserving escape codes is complex;
+		// plain text wrap is correct for search/copy and readable for display)
 		for len(plain) > maxWidth {
 			wrapped = append(wrapped, plain[:maxWidth])
 			plain = plain[maxWidth:]

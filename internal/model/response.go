@@ -12,6 +12,7 @@ type Response struct {
 	Request          *Request
 	Timestamp        time.Time
 	AssertionResults []AssertionResult
+	ScriptError      string // non-empty if post-response script failed
 }
 
 // AssertionResult holds the outcome of evaluating one assertion.

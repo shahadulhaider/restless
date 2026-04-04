@@ -189,7 +189,10 @@ Every response includes a timing waterfall: DNS, TCP connect, TLS handshake, tim
 | `E` | Edit in internal form editor |
 | `D` | Delete (with confirmation) |
 | `Y` | Duplicate request |
-| `y` | Copy request as curl |
+| `yb` | Copy response body to clipboard |
+| `yh` | Copy response headers to clipboard |
+| `ya` | Copy full response to clipboard |
+| `yc` | Copy request as curl to clipboard |
 | `q` / `ctrl+c` | Quit |
 
 ### Browser Pane

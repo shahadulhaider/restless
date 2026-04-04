@@ -11,7 +11,6 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/shahadulhaider/restless/internal/engine"
-	"github.com/shahadulhaider/restless/internal/exporter"
 	"github.com/shahadulhaider/restless/internal/history"
 	"github.com/shahadulhaider/restless/internal/model"
 	"github.com/shahadulhaider/restless/internal/parser"
@@ -244,6 +243,14 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 		return m, tea.Batch(cmds...)
 
+	case yankResult:
+		if msg.err != nil {
+			m.statusText = "Copy failed: " + msg.err.Error()
+		} else {
+			m.statusText = "Copied " + msg.label + " to clipboard"
+		}
+		return m, nil
+
 	case responseReceived:
 		if msg.resp != nil && msg.resp.Request != nil {
 			_ = history.Save(m.rootDir, msg.resp.Request, msg.resp, m.currentEnv)
@@ -359,17 +366,7 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
-		case "y":
-			// Copy current request as curl to clipboard
-			if m.detail.request != nil {
-				curlCmd := exporter.ToCurl(*m.detail.request)
-				if err := exporter.CopyToClipboard(curlCmd); err != nil {
-					m.statusText = "Copy failed: " + err.Error()
-				} else {
-					m.statusText = "Copied as curl to clipboard"
-				}
-			}
-			return m, nil
+
 		case "N":
 			// Create new .http file in current directory
 			dir := m.currentDir()
@@ -459,7 +456,7 @@ func (m App) View() tea.View {
 		case m.focus == PaneBrowser:
 			statusLine = fmt.Sprintf(" env:%s │ e:edit │ E:form │ n:new │ D:del │ Y:dup │ N:file │ F:folder │ R:rename │ ctrl+e:env │ q:quit", envLabel)
 		case m.focus == PaneDetail:
-			statusLine = " Enter:send │ space:fold │ zo/zc:open/close │ zR/zM:all │ p:pretty │ f:find │ y:curl │ h:hist │ q:quit"
+			statusLine = " Enter:send │ space:fold │ zo/zc/zR/zM:folds │ y:yank │ p:pretty │ f:find │ h:hist │ q:quit"
 		default:
 			statusLine = fmt.Sprintf(" env:%s │ tab:switch │ /:search │ ctrl+e:env │ q:quit", envLabel)
 		}

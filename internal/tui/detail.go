@@ -12,6 +12,7 @@ import (
 	"github.com/tidwall/pretty"
 
 	"github.com/shahadulhaider/restless/internal/engine"
+	"github.com/shahadulhaider/restless/internal/exporter"
 	"github.com/shahadulhaider/restless/internal/history"
 	"github.com/shahadulhaider/restless/internal/model"
 	"github.com/shahadulhaider/restless/internal/parser"
@@ -63,6 +64,9 @@ type DetailModel struct {
 	searchHits   []int
 	searchIdx    int
 
+	// Vim-style yank prefix
+	pendingY bool
+
 	// Rendered section line ranges (computed each View)
 	sectionLines []sectionRange
 }
@@ -76,6 +80,12 @@ type sectionRange struct {
 type responseReceived struct {
 	resp *model.Response
 	err  error
+}
+
+// yankResult is emitted after a yank (copy) operation to show status.
+type yankResult struct {
+	label string
+	err   error
 }
 
 type historyLoadedMsg struct {
@@ -305,9 +315,18 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 		return m, nil
 	}
 
+	// Handle y-prefix (yank) commands
+	if m.pendingY {
+		m.pendingY = false
+		return m.handleYank(key)
+	}
+
 	switch key {
 	case "z":
 		m.pendingZ = true
+		return m, nil
+	case "y":
+		m.pendingY = true
 		return m, nil
 
 	// Direct section toggles
@@ -406,6 +425,76 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// --- Yank (copy) ---
+
+func (m DetailModel) handleYank(key string) (DetailModel, tea.Cmd) {
+	if m.response == nil && key != "c" {
+		return m, nil
+	}
+
+	var text, label string
+	switch key {
+	case "b": // yb — copy body
+		if m.response != nil {
+			if m.prettyPrint {
+				text = formatBodyPlain(m.response)
+			} else {
+				text = string(m.response.Body)
+			}
+			label = "body"
+		}
+	case "h": // yh — copy headers
+		if m.response != nil {
+			var sb strings.Builder
+			for _, h := range m.response.Headers {
+				sb.WriteString(h.Key + ": " + h.Value + "\n")
+			}
+			text = sb.String()
+			label = "headers"
+		}
+	case "a": // ya — copy all (status + headers + body)
+		if m.response != nil {
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("HTTP %d %s\n", m.response.StatusCode, m.response.Status))
+			for _, h := range m.response.Headers {
+				sb.WriteString(h.Key + ": " + h.Value + "\n")
+			}
+			sb.WriteString("\n")
+			sb.WriteString(string(m.response.Body))
+			text = sb.String()
+			label = "response"
+		}
+	case "c": // yc — copy as curl
+		if m.request != nil {
+			text = exporter.ToCurl(*m.request)
+			label = "curl"
+		}
+	default:
+		return m, nil
+	}
+
+	if text == "" {
+		return m, nil
+	}
+
+	return m, func() tea.Msg {
+		err := exporter.CopyToClipboard(text)
+		return yankResult{label: label, err: err}
+	}
+}
+
+// formatBodyPlain returns pretty-printed body without ANSI colors (for clipboard).
+func formatBodyPlain(resp *model.Response) string {
+	if len(resp.Body) == 0 {
+		return ""
+	}
+	ct := strings.ToLower(resp.ContentType)
+	if strings.Contains(ct, "json") {
+		return string(pretty.Pretty(resp.Body))
+	}
+	return string(resp.Body)
 }
 
 // --- Search ---
@@ -517,10 +606,14 @@ func (m DetailModel) View() string {
 		sb.WriteString(lipgloss.NewStyle().Foreground(colorBorderActive).Render("find: " + m.searchQuery + "█" + matchInfo))
 	}
 
-	// z-pending indicator
+	// Pending prefix indicator
 	if m.pendingZ {
 		sb.WriteString("\n")
 		sb.WriteString(dimStyle.Render("z-"))
+	}
+	if m.pendingY {
+		sb.WriteString("\n")
+		sb.WriteString(dimStyle.Render("y- (b:body  h:headers  a:all  c:curl)"))
 	}
 
 	return sb.String()
@@ -548,10 +641,12 @@ func (m DetailModel) renderAccordion() string {
 		return strings.Count(s, "\n") + 1
 	}
 
+	numStyle := lipgloss.NewStyle().Foreground(colorBorderActive)
+
 	// ── Body Section ──
 	bodyStart := lineIdx
 	if m.bodyExpanded {
-		sb.WriteString(headerStyle.Render("▼ Body") + " " + divider + "\n")
+		sb.WriteString(headerStyle.Render("▼ ") + numStyle.Render("[1]") + headerStyle.Render(" Body") + " " + divider + "\n")
 		lineIdx++
 		bodyContent := m.renderBodyContent()
 		sb.WriteString(bodyContent)
@@ -560,9 +655,8 @@ func (m DetailModel) renderAccordion() string {
 		lineIdx++
 	} else {
 		preview := m.bodyPreview()
-		sb.WriteString(headerStyle.Render("▶ Body") + " " + dimStyle.Render("── "+preview) + "\n")
+		sb.WriteString(headerStyle.Render("▶ ") + numStyle.Render("[1]") + headerStyle.Render(" Body") + " " + dimStyle.Render("── "+preview) + "\n")
 		lineIdx++
-		// Show 2-line preview
 		previewLines := m.bodyPreviewLines(2)
 		if previewLines != "" {
 			sb.WriteString(dimStyle.Render(previewLines) + "\n")
@@ -577,7 +671,7 @@ func (m DetailModel) renderAccordion() string {
 	headersStart := lineIdx
 	headerCount := len(resp.Headers)
 	if m.headersExpanded {
-		sb.WriteString(headerStyle.Render(fmt.Sprintf("▼ Headers (%d)", headerCount)) + " " + divider + "\n")
+		sb.WriteString(headerStyle.Render("▼ ") + numStyle.Render("[2]") + headerStyle.Render(fmt.Sprintf(" Headers (%d)", headerCount)) + " " + divider + "\n")
 		lineIdx++
 		hdrContent := headersView(resp)
 		sb.WriteString(hdrContent)
@@ -586,7 +680,7 @@ func (m DetailModel) renderAccordion() string {
 		lineIdx++
 	} else {
 		preview := m.headersPreview()
-		sb.WriteString(headerStyle.Render(fmt.Sprintf("▶ Headers (%d)", headerCount)) + " " + dimStyle.Render("── "+preview) + "\n")
+		sb.WriteString(headerStyle.Render("▶ ") + numStyle.Render("[2]") + headerStyle.Render(fmt.Sprintf(" Headers (%d)", headerCount)) + " " + dimStyle.Render("── "+preview) + "\n")
 		lineIdx++
 		previewLines := m.headersPreviewLines(2)
 		if previewLines != "" {
@@ -602,14 +696,14 @@ func (m DetailModel) renderAccordion() string {
 	timingStart := lineIdx
 	totalMs := resp.Timing.Total.Milliseconds()
 	if m.timingExpanded {
-		sb.WriteString(headerStyle.Render(fmt.Sprintf("▼ Timing ── %dms", totalMs)) + " " + divider + "\n")
+		sb.WriteString(headerStyle.Render("▼ ") + numStyle.Render("[3]") + headerStyle.Render(fmt.Sprintf(" Timing ── %dms", totalMs)) + " " + divider + "\n")
 		lineIdx++
 		timContent := timingView(resp)
 		sb.WriteString(timContent)
 		lineIdx += countLines(timContent)
 	} else {
 		preview := m.timingPreview()
-		sb.WriteString(headerStyle.Render(fmt.Sprintf("▶ Timing ── %dms", totalMs)) + " " + dimStyle.Render("── "+preview) + "\n")
+		sb.WriteString(headerStyle.Render("▶ ") + numStyle.Render("[3]") + headerStyle.Render(fmt.Sprintf(" Timing ── %dms", totalMs)) + " " + dimStyle.Render("── "+preview) + "\n")
 		lineIdx++
 	}
 	ranges = append(ranges, sectionRange{sectionTiming, timingStart, lineIdx})

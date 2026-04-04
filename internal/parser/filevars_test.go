@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestExtractFileVariables(t *testing.T) {
@@ -61,4 +62,39 @@ GET {{baseUrl}}/health
 		}
 	}
 	assert.True(t, found, "GET method should still be parsed")
+}
+
+func TestParseAssertions(t *testing.T) {
+	content := []byte(`# @name test
+GET https://example.com/api
+# @assert status == 200
+# @assert body.$.id != null
+# @assert header.Content-Type contains json
+# @assert duration < 2000
+# @assert body contains "hello"
+# @assert header.X-Id exists
+`)
+	reqs, err := ParseBytes(content, "test.http")
+	require.NoError(t, err)
+	require.Len(t, reqs, 1)
+	assert.Len(t, reqs[0].Assertions, 6)
+
+	a := reqs[0].Assertions
+	assert.Equal(t, "status", a[0].Target)
+	assert.Equal(t, "==", a[0].Operator)
+	assert.Equal(t, "200", a[0].Expected)
+
+	assert.Equal(t, "body.$.id", a[1].Target)
+	assert.Equal(t, "!=", a[1].Operator)
+	assert.Equal(t, "null", a[1].Expected)
+
+	assert.Equal(t, "header.Content-Type", a[2].Target)
+	assert.Equal(t, "contains", a[2].Operator)
+	assert.Equal(t, "json", a[2].Expected)
+
+	assert.Equal(t, "duration", a[3].Target)
+	assert.Equal(t, "<", a[3].Operator)
+
+	assert.Equal(t, "header.X-Id", a[5].Target)
+	assert.Equal(t, "exists", a[5].Operator)
 }

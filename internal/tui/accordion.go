@@ -85,6 +85,8 @@ func renderAccordionSections(sections []accordionSection, width int) accordionRe
 			secEnum = sectionHeaders
 		case "3":
 			secEnum = sectionTiming
+		case "4":
+			secEnum = 3 // assertions
 		}
 		ranges = append(ranges, sectionRange{secEnum, start, lineIdx - 1})
 	}

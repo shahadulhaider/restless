@@ -171,6 +171,41 @@ func collectBody(tokens []Token, start int) (lines []string, consumed int, fileR
 	return lines, consumed, fileRef
 }
 
+// parseAssertion parses an assertion string like "status == 200" into an Assertion.
+func parseAssertion(raw string) (model.Assertion, bool) {
+	a := model.Assertion{Raw: raw}
+
+	// Handle unary operators first: "exists" and "!exists"
+	if strings.HasSuffix(raw, " exists") {
+		a.Target = strings.TrimSuffix(raw, " exists")
+		a.Operator = "exists"
+		return a, true
+	}
+	if strings.HasSuffix(raw, " !exists") {
+		a.Target = strings.TrimSuffix(raw, " !exists")
+		a.Operator = "!exists"
+		return a, true
+	}
+
+	// Binary operators (ordered longest first to avoid partial matches)
+	operators := []string{">=", "<=", "!=", "==", ">", "<", "contains", "matches"}
+	for _, op := range operators {
+		idx := strings.Index(raw, " "+op+" ")
+		if idx >= 0 {
+			a.Target = strings.TrimSpace(raw[:idx])
+			a.Operator = op
+			a.Expected = strings.TrimSpace(raw[idx+len(op)+2:])
+			// Strip surrounding quotes from expected value
+			if len(a.Expected) >= 2 && a.Expected[0] == '"' && a.Expected[len(a.Expected)-1] == '"' {
+				a.Expected = a.Expected[1 : len(a.Expected)-1]
+			}
+			return a, true
+		}
+	}
+
+	return a, false
+}
+
 func applyMetadata(req *model.Request, meta []Token) {
 	for _, m := range meta {
 		applyMetadataSingle(req, m)
@@ -203,5 +238,10 @@ func applyMetadataSingle(req *model.Request, m Token) {
 		req.Metadata.Insecure = true
 	case strings.HasPrefix(val, "proxy "):
 		req.Metadata.Proxy = strings.TrimSpace(strings.TrimPrefix(val, "proxy "))
+	case strings.HasPrefix(val, "assert "):
+		raw := strings.TrimSpace(strings.TrimPrefix(val, "assert "))
+		if a, ok := parseAssertion(raw); ok {
+			req.Assertions = append(req.Assertions, a)
+		}
 	}
 }

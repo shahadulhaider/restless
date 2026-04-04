@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shahadulhaider/restless/internal/assert"
 	"github.com/shahadulhaider/restless/internal/engine"
 	"github.com/shahadulhaider/restless/internal/importer"
 	"github.com/shahadulhaider/restless/internal/parser"
@@ -223,7 +224,14 @@ func runCmd() *cobra.Command {
 			}
 		}
 
+		totalRequests := 0
+		passedRequests := 0
+		totalAssertions := 0
+		passedAssertions := 0
+		anyFailed := false
+
 		for _, req := range reqs {
+				totalRequests++
 				resolved, _ := parser.ResolveRequest(&req, envVars, chainCtx)
 				loaded, loadErr := parser.LoadFileBody(resolved, rootDir)
 				if loadErr != nil {
@@ -233,7 +241,8 @@ func runCmd() *cobra.Command {
 				jar := cookies.JarForEnv(envName)
 				resp, execErr := engine.ExecuteWithJar(loaded, jar)
 				if execErr != nil {
-					fmt.Fprintf(os.Stderr, "ERROR %s %s: %v\n", loaded.Method, loaded.URL, execErr)
+					fmt.Fprintf(os.Stderr, "\033[31m✗\033[0m %s %s: %v\n", loaded.Method, loaded.URL, execErr)
+					anyFailed = true
 					if failFast {
 						return execErr
 					}
@@ -244,10 +253,59 @@ func runCmd() *cobra.Command {
 					chainCtx.StoreResponse(loaded.Name, resp)
 				}
 
-				fmt.Fprintf(os.Stdout, "%s %s → %s (%dms)\n",
-					loaded.Method, loaded.URL,
-					resp.Status,
-					resp.Timing.Total.Milliseconds())
+				// Run assertions
+				results := assert.EvaluateAll(loaded, resp)
+				resp.AssertionResults = results
+				passed := assert.CountPassed(results)
+				allOk := assert.AllPassed(results)
+				totalAssertions += len(results)
+				passedAssertions += passed
+
+				name := loaded.Name
+				if name == "" {
+					name = loaded.Method + " " + loaded.URL
+				}
+
+				if len(results) == 0 {
+					fmt.Fprintf(os.Stdout, "\033[32m✓\033[0m %s  %s  %dms\n",
+						name, resp.Status, resp.Timing.Total.Milliseconds())
+					passedRequests++
+				} else if allOk {
+					fmt.Fprintf(os.Stdout, "\033[32m✓\033[0m %s  %s  %dms  (%d/%d passed)\n",
+						name, resp.Status, resp.Timing.Total.Milliseconds(), passed, len(results))
+					passedRequests++
+				} else {
+					fmt.Fprintf(os.Stdout, "\033[31m✗\033[0m %s  %s  %dms\n",
+						name, resp.Status, resp.Timing.Total.Milliseconds())
+					for _, r := range results {
+						if r.Passed {
+							fmt.Fprintf(os.Stdout, "    \033[32m✓\033[0m %s\n", r.Assertion.Raw)
+						} else {
+							msg := fmt.Sprintf("    \033[31m✗\033[0m %s", r.Assertion.Raw)
+							if r.Error != "" {
+								msg += fmt.Sprintf(" (%s)", r.Error)
+							} else {
+								msg += fmt.Sprintf(" (got %s)", r.Actual)
+							}
+							fmt.Fprintln(os.Stdout, msg)
+						}
+					}
+					anyFailed = true
+				}
+
+				if !allOk && failFast {
+					break
+				}
+			}
+
+			if totalAssertions > 0 {
+				fmt.Fprintf(os.Stdout, "\n%d requests | %d passed | %d failed | %d/%d assertions passed\n",
+					totalRequests, passedRequests, totalRequests-passedRequests,
+					passedAssertions, totalAssertions)
+			}
+
+			if anyFailed {
+				os.Exit(1)
 			}
 			return nil
 		},

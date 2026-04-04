@@ -187,6 +187,43 @@ restless import openapi   spec.yaml            # OpenAPI 3.x / Swagger 2.0
 
 All importers produce standard `.http` files. Environments are converted to `http-client.env.json`.
 
+### Response Assertions
+
+Add assertions to validate responses — perfect for CI/CD:
+
+```http
+# @name createUser
+POST {{baseUrl}}/users
+Content-Type: application/json
+
+{"name": "Alice"}
+
+# @assert status == 201
+# @assert body.$.id != null
+# @assert body.$.name == "Alice"
+# @assert header.Content-Type contains json
+# @assert duration < 2000
+# @assert size < 10240
+```
+
+**Supported targets**: `status`, `body` (raw), `body.$.path` (JSON path), `header.Name`, `duration` (ms), `size` (bytes)
+
+**Supported operators**: `==`, `!=`, `<`, `>`, `<=`, `>=`, `contains`, `matches` (regex), `exists`, `!exists`
+
+When running headless, assertions produce colored output and set exit code:
+
+```bash
+$ restless run api.http --env dev
+✓ createUser  201 Created  142ms  (4/4 passed)
+✗ getUser     404 Not Found  38ms
+    ✗ status == 200 (got 404)
+    ✓ duration < 2000
+
+2 requests | 1 passed | 1 failed | 5/6 assertions passed
+```
+
+In the TUI, assertions appear as a `[4] Assertions` accordion section after the response.
+
 ### Headless Runner
 
 Run requests in CI/CD pipelines or scripts:
@@ -345,6 +382,7 @@ Content-Type: application/json
 | `# @connection-timeout <seconds>` | Connection timeout |
 | `# @insecure` | Skip TLS certificate verification |
 | `# @proxy <url>` | Use HTTP proxy for this request |
+| `# @assert <expr>` | Response assertion (see Assertions section) |
 
 Compatible with [JetBrains HTTP Client](https://www.jetbrains.com/help/idea/http-client-in-product-code-editor.html) and [VS Code REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client).
 

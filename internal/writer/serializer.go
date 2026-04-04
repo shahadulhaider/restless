@@ -35,6 +35,9 @@ func SerializeRequest(req model.Request) string {
 	if req.Metadata.Proxy != "" {
 		sb.WriteString(fmt.Sprintf("# @proxy %s\n", req.Metadata.Proxy))
 	}
+	for _, a := range req.Assertions {
+		sb.WriteString(fmt.Sprintf("# @assert %s\n", a.Raw))
+	}
 
 	// Request line: METHOD URL [HTTP/version]
 	if req.HTTPVersion != "" {

@@ -11,8 +11,17 @@ type Request struct {
 	Body        string
 	BodyFile    string
 	Metadata    RequestMetadata
+	Assertions  []Assertion
 	SourceFile  string
 	SourceLine  int
+}
+
+// Assertion defines a response assertion declared via # @assert.
+type Assertion struct {
+	Target   string // "status", "body.$.id", "header.Content-Type", "duration", "size"
+	Operator string // "==", "!=", "<", ">", "<=", ">=", "contains", "matches", "exists", "!exists"
+	Expected string // "201", "Alice", "json"
+	Raw      string // original text: "status == 201"
 }
 
 type Header struct {

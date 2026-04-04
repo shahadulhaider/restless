@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/tidwall/pretty"
 
+	"github.com/shahadulhaider/restless/internal/assert"
 	"github.com/shahadulhaider/restless/internal/engine"
 	"github.com/shahadulhaider/restless/internal/exporter"
 	"github.com/shahadulhaider/restless/internal/history"
@@ -58,11 +59,11 @@ type DetailModel struct {
 	diffIdxA       int
 
 	// Request accordion state
-	reqFolds   [3]bool // Body, Headers, Metadata expanded
+	reqFolds   [4]bool // Body, Headers, Metadata, Assertions expanded
 	reqOffset  int
 
 	// Response accordion state
-	respFolds  [3]bool // Body, Headers, Timing expanded
+	respFolds  [4]bool // Body, Headers, Timing, Assertions expanded
 	respOffset int
 
 	expandAll bool
@@ -105,8 +106,8 @@ func NewDetailModel(rootDir string, chainCtx *parser.ChainContext, cookies *engi
 		showLineNums: true,
 		prettyPrint:  true,
 		mode:         modeRequest,
-		reqFolds:     [3]bool{true, false, false},  // body expanded
-		respFolds:    [3]bool{true, false, false},   // body expanded
+		reqFolds:     [4]bool{true, false, false, false},  // body expanded
+		respFolds:    [4]bool{true, false, false, false},   // body expanded
 	}
 }
 
@@ -138,7 +139,7 @@ func (m *DetailModel) setOffset(v int) {
 	}
 }
 
-func (m *DetailModel) folds() *[3]bool {
+func (m *DetailModel) folds() *[4]bool {
 	if m.mode == modeRequest {
 		return &m.reqFolds
 	}
@@ -164,8 +165,8 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 		m.errMsg = ""
 		m.showHistory = false
 		m.clearSearch()
-		m.reqFolds = [3]bool{true, false, false}
-		m.respFolds = [3]bool{true, false, false}
+		m.reqFolds = [4]bool{true, false, false, false}
+		m.respFolds = [4]bool{true, false, false, false}
 		m.expandAll = false
 
 	case historyLoadedMsg:
@@ -180,10 +181,20 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 		} else {
 			m.response = msg.resp
 			m.errMsg = ""
-			m.mode = modeResponse // auto-switch to response
+			m.mode = modeResponse
+			// Run assertions
+			if m.request != nil && len(m.request.Assertions) > 0 {
+				m.response.AssertionResults = assert.EvaluateAll(m.request, m.response)
+			}
 		}
 		m.respOffset = 0
-		m.respFolds = [3]bool{true, false, false}
+		hasAssertions := m.response != nil && len(m.response.AssertionResults) > 0
+		if hasAssertions && !assert.AllPassed(m.response.AssertionResults) {
+			// Auto-expand assertions section if any failed
+			m.respFolds = [4]bool{true, false, false, true}
+		} else {
+			m.respFolds = [4]bool{true, false, false, false}
+		}
 		m.expandAll = false
 		m.clearSearch()
 
@@ -218,7 +229,7 @@ func (m DetailModel) updateHistory(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 			m.showHistory = false
 			m.mode = modeResponse
 			m.respOffset = 0
-			m.respFolds = [3]bool{true, false, false}
+			m.respFolds = [4]bool{true, false, false, false}
 		}
 	case "d":
 		if !m.diffMode {
@@ -274,10 +285,10 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 		case "c":
 			folds[cur] = false
 		case "M":
-			*folds = [3]bool{false, false, false}
+			*folds = [4]bool{false, false, false, false}
 			m.expandAll = false
 		case "R":
-			*folds = [3]bool{true, true, true}
+			*folds = [4]bool{true, true, true, true}
 			m.expandAll = true
 		}
 		return m, nil
@@ -417,7 +428,7 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 func (m *DetailModel) expandSection(idx section) {
 	folds := m.folds()
 	if !m.expandAll {
-		*folds = [3]bool{false, false, false}
+		*folds = [4]bool{false, false, false, false}
 	}
 	folds[idx] = true
 }
@@ -812,6 +823,61 @@ func (m DetailModel) buildResponseAccordion() accordionResult {
 		{key: "1", label: "Body", summary: bodySummary, preview: bodyPreview, content: bodyContent, expanded: m.respFolds[0]},
 		{key: "2", label: fmt.Sprintf("Headers (%d)", len(resp.Headers)), summary: hdrSummary, preview: hdrPreview, content: hdrContent, expanded: m.respFolds[1]},
 		{key: "3", label: fmt.Sprintf("Timing ── %dms", totalMs), summary: timingSummary, content: timingContent, expanded: m.respFolds[2]},
+	}
+
+	// Section 4: Assertions (only if assertions exist)
+	if len(resp.AssertionResults) > 0 {
+		passed := assert.CountPassed(resp.AssertionResults)
+		total := len(resp.AssertionResults)
+		allOk := assert.AllPassed(resp.AssertionResults)
+
+		assertLabel := fmt.Sprintf("Assertions (%d/%d passed)", passed, total)
+		assertSummary := ""
+		if !allOk {
+			// Show first failing assertion in summary
+			for _, r := range resp.AssertionResults {
+				if !r.Passed {
+					assertSummary = "✗ " + r.Assertion.Raw
+					break
+				}
+			}
+		} else {
+			assertSummary = "all passed"
+		}
+
+		var assertContent strings.Builder
+		passStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#4CAF50"))
+		failStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F44336"))
+		for _, r := range resp.AssertionResults {
+			if r.Passed {
+				assertContent.WriteString("  " + passStyle.Render("✓") + " " + r.Assertion.Raw + "\n")
+			} else {
+				line := "  " + failStyle.Render("✗") + " " + r.Assertion.Raw
+				if r.Error != "" {
+					line += dimStyle.Render(fmt.Sprintf(" (%s)", r.Error))
+				} else {
+					line += dimStyle.Render(fmt.Sprintf(" (got %s)", r.Actual))
+				}
+				assertContent.WriteString(line + "\n")
+			}
+		}
+
+		assertPreview := ""
+		if !allOk {
+			// Preview: first failing assertion
+			for _, r := range resp.AssertionResults {
+				if !r.Passed {
+					assertPreview = "  " + dimStyle.Render("✗ "+r.Assertion.Raw+" (got "+r.Actual+")")
+					break
+				}
+			}
+		}
+
+		sections = append(sections, accordionSection{
+			key: "4", label: assertLabel, summary: assertSummary,
+			preview: assertPreview, content: assertContent.String(),
+			expanded: m.respFolds[3],
+		})
 	}
 
 	return renderAccordionSections(sections, m.width)

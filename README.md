@@ -75,7 +75,7 @@ Browse your collection, send requests, inspect responses — all from the keyboa
 
 - **Split-pane layout** — collection browser on the left, request/response detail on the right
 - **Fuzzy search** — press `/` to find any request by name, method, or URL
-- **Response viewer** — JSON pretty-printing with colors, XML/HTML indentation, line numbers, word wrap, search with match highlighting, page-up/down scrolling
+- **Response viewer** — collapsible accordion (Body/Headers/Timing), JSON pretty-printing with colors, XML/HTML indentation, line numbers, word wrap, search with match highlighting, vim-style fold commands (`zo`/`zc`/`zR`/`zM`)
 - **Response history** — every response is saved; browse past responses with `h`, diff any two with `d`
 - **Timing waterfall** — color-coded DNS, TCP, TLS, TTFB, and body transfer breakdown
 
@@ -208,7 +208,12 @@ Every response includes a timing waterfall: DNS, TCP connect, TLS handshake, tim
 | Key | Action |
 |-----|--------|
 | `Enter` / `ctrl+r` | Send request |
-| `1` / `2` / `3` | Switch tabs (Body / Headers / Timing) |
+| `Space` | Toggle fold section under cursor |
+| `1` / `2` / `3` | Toggle Body / Headers / Timing |
+| `zo` | Expand section under cursor |
+| `zc` | Collapse section under cursor |
+| `zR` | Expand all sections |
+| `zM` | Collapse all sections |
 | `p` | Toggle pretty-print / raw |
 | `j` / `k` | Scroll line by line |
 | `ctrl+d` / `ctrl+u` | Scroll half page down / up |

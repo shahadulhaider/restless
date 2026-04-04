@@ -17,42 +17,60 @@ import (
 	"github.com/shahadulhaider/restless/internal/parser"
 )
 
-type detailTab int
+// section identifies a collapsible response section.
+type section int
 
 const (
-	tabBody    detailTab = iota // 1 — body first
-	tabHeaders                  // 2
-	tabTiming                   // 3
+	sectionBody    section = iota
+	sectionHeaders
+	sectionTiming
 )
 
 type DetailModel struct {
-	request        *model.Request
-	response       *model.Response
-	tab            detailTab
-	sending        bool
-	errMsg         string
-	width          int
-	height         int
-	offset         int
-	rootDir        string
-	currentEnv     string
-	envVars        map[string]string
-	chainCtx       *parser.ChainContext
-	cookies        *engine.CookieManager
+	request  *model.Request
+	response *model.Response
+	sending  bool
+	errMsg   string
+	width    int
+	height   int
+	offset   int
+	rootDir  string
+
+	currentEnv string
+	envVars    map[string]string
+	chainCtx   *parser.ChainContext
+	cookies    *engine.CookieManager
+
 	showHistory    bool
 	historyEntries []history.HistoryEntry
 	historyIdx     int
 	diffMode       bool
 	diffIdxA       int
 
+	// Section fold state
+	bodyExpanded    bool
+	headersExpanded bool
+	timingExpanded  bool
+	expandAll       bool // zR override — allows multiple sections open
+	pendingZ        bool // waiting for second char in z-command
+
 	// Body viewer
 	wordWrap     bool
 	showLineNums bool
-	prettyPrint  bool   // true = formatted, false = raw
+	prettyPrint  bool
 	searching    bool
 	searchQuery  string
 	searchHits   []int
 	searchIdx    int
+
+	// Rendered section line ranges (computed each View)
+	sectionLines []sectionRange
+}
+
+type sectionRange struct {
+	sec   section
+	start int // line index in rendered output
+	end   int
 }
 
 type responseReceived struct {
@@ -66,22 +84,22 @@ type historyLoadedMsg struct {
 
 func NewDetailModel(rootDir string, chainCtx *parser.ChainContext, cookies *engine.CookieManager) DetailModel {
 	return DetailModel{
-		rootDir:      rootDir,
-		chainCtx:     chainCtx,
-		cookies:      cookies,
-		envVars:      make(map[string]string),
-		showLineNums: true,
-		prettyPrint:  true,
-		tab:          tabBody, // body is default
+		rootDir:         rootDir,
+		chainCtx:        chainCtx,
+		cookies:         cookies,
+		envVars:         make(map[string]string),
+		showLineNums:    true,
+		prettyPrint:     true,
+		bodyExpanded:    true,
+		headersExpanded: false,
+		timingExpanded:  false,
 	}
 }
 
-func (m DetailModel) Init() tea.Cmd {
-	return nil
-}
+func (m DetailModel) Init() tea.Cmd { return nil }
 
 func (m DetailModel) viewableHeight() int {
-	h := m.height - 5 // sticky status + tab bar + padding
+	h := m.height - 3 // sticky status + padding
 	if m.searching {
 		h--
 	}
@@ -108,6 +126,7 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 		m.errMsg = ""
 		m.showHistory = false
 		m.clearSearch()
+		m.resetFolds()
 
 	case historyLoadedMsg:
 		m.historyEntries = msg.entries
@@ -123,8 +142,8 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 			m.errMsg = ""
 		}
 		m.offset = 0
-		m.tab = tabBody // always show body after response
 		m.clearSearch()
+		m.resetFolds()
 
 	case tea.KeyPressMsg:
 		if m.showHistory {
@@ -136,6 +155,68 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 		return m.updateNormal(msg)
 	}
 	return m, nil
+}
+
+func (m *DetailModel) resetFolds() {
+	m.bodyExpanded = true
+	m.headersExpanded = false
+	m.timingExpanded = false
+	m.expandAll = false
+}
+
+// expandSection expands sec. In accordion mode, collapses others.
+func (m *DetailModel) expandSection(sec section) {
+	if !m.expandAll {
+		m.bodyExpanded = false
+		m.headersExpanded = false
+		m.timingExpanded = false
+	}
+	switch sec {
+	case sectionBody:
+		m.bodyExpanded = true
+	case sectionHeaders:
+		m.headersExpanded = true
+	case sectionTiming:
+		m.timingExpanded = true
+	}
+}
+
+func (m *DetailModel) collapseSection(sec section) {
+	switch sec {
+	case sectionBody:
+		m.bodyExpanded = false
+	case sectionHeaders:
+		m.headersExpanded = false
+	case sectionTiming:
+		m.timingExpanded = false
+	}
+}
+
+func (m *DetailModel) toggleSection(sec section) {
+	expanded := false
+	switch sec {
+	case sectionBody:
+		expanded = m.bodyExpanded
+	case sectionHeaders:
+		expanded = m.headersExpanded
+	case sectionTiming:
+		expanded = m.timingExpanded
+	}
+	if expanded {
+		m.collapseSection(sec)
+	} else {
+		m.expandSection(sec)
+	}
+}
+
+// sectionAtOffset returns which section the current scroll offset is in.
+func (m DetailModel) sectionAtOffset() section {
+	for _, sr := range lastSectionLines {
+		if m.offset >= sr.start && m.offset <= sr.end {
+			return sr.sec
+		}
+	}
+	return sectionBody
 }
 
 func (m DetailModel) updateHistory(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
@@ -155,8 +236,8 @@ func (m DetailModel) updateHistory(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 		if m.historyIdx < len(m.historyEntries) {
 			m.response = m.historyEntries[m.historyIdx].Response
 			m.showHistory = false
-			m.tab = tabBody
 			m.offset = 0
+			m.resetFolds()
 		}
 	case "d":
 		if !m.diffMode {
@@ -199,16 +280,52 @@ func (m DetailModel) updateSearch(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 }
 
 func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
-	switch msg.String() {
+	key := msg.String()
+
+	// Handle z-prefix commands
+	if m.pendingZ {
+		m.pendingZ = false
+		cur := m.sectionAtOffset()
+		switch key {
+		case "o": // zo — expand current section
+			m.expandSection(cur)
+		case "c": // zc — collapse current section
+			m.collapseSection(cur)
+		case "M": // zM — collapse all
+			m.bodyExpanded = false
+			m.headersExpanded = false
+			m.timingExpanded = false
+			m.expandAll = false
+		case "R": // zR — expand all
+			m.bodyExpanded = true
+			m.headersExpanded = true
+			m.timingExpanded = true
+			m.expandAll = true
+		}
+		return m, nil
+	}
+
+	switch key {
+	case "z":
+		m.pendingZ = true
+		return m, nil
+
+	// Direct section toggles
 	case "1":
-		m.tab = tabBody
+		m.toggleSection(sectionBody)
 		m.offset = 0
 	case "2":
-		m.tab = tabHeaders
-		m.offset = 0
+		m.toggleSection(sectionHeaders)
 	case "3":
-		m.tab = tabTiming
-		m.offset = 0
+		m.toggleSection(sectionTiming)
+
+	// Space toggles section under cursor
+	case " ":
+		if m.response != nil {
+			cur := m.sectionAtOffset()
+			m.toggleSection(cur)
+		}
+
 	case "h":
 		if m.request != nil {
 			req := m.request
@@ -219,6 +336,7 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 			}
 		}
 		m.showHistory = !m.showHistory
+
 	case "enter", "ctrl+r":
 		if m.request != nil && !m.sending {
 			m.sending = true
@@ -270,7 +388,7 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 		m.prettyPrint = !m.prettyPrint
 		m.offset = 0
 	case "f":
-		if m.response != nil && m.tab == tabBody {
+		if m.response != nil {
 			m.searching = true
 			m.searchQuery = ""
 			m.searchHits = nil
@@ -305,8 +423,9 @@ func (m *DetailModel) rebuildSearchHits() {
 	if m.searchQuery == "" || m.response == nil {
 		return
 	}
-	body := m.getBodyText()
-	lines := strings.Split(body, "\n")
+	// Search across the full rendered accordion
+	rendered := m.renderAccordion()
+	lines := strings.Split(rendered, "\n")
 	query := strings.ToLower(m.searchQuery)
 	for i, line := range lines {
 		if strings.Contains(strings.ToLower(line), query) {
@@ -347,25 +466,12 @@ func (m DetailModel) View() string {
 		return sb.String()
 	}
 
-	// ── Sticky status bar ──
+	// ── Sticky status ──
 	sb.WriteString(m.stickyStatus())
-	sb.WriteString("\n")
-
-	// ── Tab bar ──
-	sb.WriteString(m.tabBar())
 	sb.WriteString("\n\n")
 
-	// ── Tab content ──
-	var content string
-	switch m.tab {
-	case tabBody:
-		content = m.enhancedBodyView()
-	case tabHeaders:
-		content = headersView(m.response)
-	case tabTiming:
-		content = timingView(m.response)
-	}
-
+	// ── Accordion sections ──
+	content := m.renderAccordion()
 	lines := strings.Split(content, "\n")
 
 	// Clamp offset
@@ -388,7 +494,7 @@ func (m DetailModel) View() string {
 		sb.WriteString(l + "\n")
 	}
 
-	// Scroll position
+	// Scroll indicator
 	if len(lines) > m.viewableHeight() {
 		pct := 0
 		if maxOffset > 0 {
@@ -411,17 +517,272 @@ func (m DetailModel) View() string {
 		sb.WriteString(lipgloss.NewStyle().Foreground(colorBorderActive).Render("find: " + m.searchQuery + "█" + matchInfo))
 	}
 
+	// z-pending indicator
+	if m.pendingZ {
+		sb.WriteString("\n")
+		sb.WriteString(dimStyle.Render("z-"))
+	}
+
 	return sb.String()
 }
 
-// stickyStatus renders the always-visible status bar at the top of the response view.
+// renderAccordion renders all three sections as a single scrollable view.
+// It also populates m.sectionLines for section-at-offset detection.
+func (m DetailModel) renderAccordion() string {
+	resp := m.response
+	if resp == nil {
+		return ""
+	}
+
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#CDD6F4"))
+	divider := dimStyle.Render(strings.Repeat("─", max(m.width-6, 10)))
+
+	var sb strings.Builder
+	var ranges []sectionRange
+	lineIdx := 0
+
+	countLines := func(s string) int {
+		if s == "" {
+			return 0
+		}
+		return strings.Count(s, "\n") + 1
+	}
+
+	// ── Body Section ──
+	bodyStart := lineIdx
+	if m.bodyExpanded {
+		sb.WriteString(headerStyle.Render("▼ Body") + " " + divider + "\n")
+		lineIdx++
+		bodyContent := m.renderBodyContent()
+		sb.WriteString(bodyContent)
+		lineIdx += countLines(bodyContent)
+		sb.WriteString("\n")
+		lineIdx++
+	} else {
+		preview := m.bodyPreview()
+		sb.WriteString(headerStyle.Render("▶ Body") + " " + dimStyle.Render("── "+preview) + "\n")
+		lineIdx++
+		// Show 2-line preview
+		previewLines := m.bodyPreviewLines(2)
+		if previewLines != "" {
+			sb.WriteString(dimStyle.Render(previewLines) + "\n")
+			lineIdx += countLines(previewLines)
+		}
+		sb.WriteString("\n")
+		lineIdx++
+	}
+	ranges = append(ranges, sectionRange{sectionBody, bodyStart, lineIdx - 1})
+
+	// ── Headers Section ──
+	headersStart := lineIdx
+	headerCount := len(resp.Headers)
+	if m.headersExpanded {
+		sb.WriteString(headerStyle.Render(fmt.Sprintf("▼ Headers (%d)", headerCount)) + " " + divider + "\n")
+		lineIdx++
+		hdrContent := headersView(resp)
+		sb.WriteString(hdrContent)
+		lineIdx += countLines(hdrContent)
+		sb.WriteString("\n")
+		lineIdx++
+	} else {
+		preview := m.headersPreview()
+		sb.WriteString(headerStyle.Render(fmt.Sprintf("▶ Headers (%d)", headerCount)) + " " + dimStyle.Render("── "+preview) + "\n")
+		lineIdx++
+		previewLines := m.headersPreviewLines(2)
+		if previewLines != "" {
+			sb.WriteString(dimStyle.Render(previewLines) + "\n")
+			lineIdx += countLines(previewLines)
+		}
+		sb.WriteString("\n")
+		lineIdx++
+	}
+	ranges = append(ranges, sectionRange{sectionHeaders, headersStart, lineIdx - 1})
+
+	// ── Timing Section ──
+	timingStart := lineIdx
+	totalMs := resp.Timing.Total.Milliseconds()
+	if m.timingExpanded {
+		sb.WriteString(headerStyle.Render(fmt.Sprintf("▼ Timing ── %dms", totalMs)) + " " + divider + "\n")
+		lineIdx++
+		timContent := timingView(resp)
+		sb.WriteString(timContent)
+		lineIdx += countLines(timContent)
+	} else {
+		preview := m.timingPreview()
+		sb.WriteString(headerStyle.Render(fmt.Sprintf("▶ Timing ── %dms", totalMs)) + " " + dimStyle.Render("── "+preview) + "\n")
+		lineIdx++
+	}
+	ranges = append(ranges, sectionRange{sectionTiming, timingStart, lineIdx})
+
+	// Store ranges for sectionAtOffset (we can't modify m directly in View,
+	// but this is used by the next Update call)
+	// We'll use a package-level workaround since View is a value receiver
+	lastSectionLines = ranges
+
+	return sb.String()
+}
+
+// Package-level storage for section ranges (View is value receiver, can't modify m)
+var lastSectionLines []sectionRange
+
+func (m DetailModel) renderBodyContent() string {
+	if len(m.response.Body) == 0 {
+		return dimStyle.Render("  (empty body)")
+	}
+
+	var raw string
+	if m.prettyPrint {
+		raw = formatBody(m.response, m.bodyWidth())
+	} else {
+		raw = string(m.response.Body)
+	}
+	lines := strings.Split(raw, "\n")
+
+	if m.wordWrap {
+		lines = wrapLines(lines, m.bodyWidth())
+	}
+
+	// Search matches
+	matchSet := make(map[int]bool)
+	for _, idx := range m.searchHits {
+		matchSet[idx] = true
+	}
+	currentMatch := -1
+	if len(m.searchHits) > 0 {
+		currentMatch = m.searchHits[m.searchIdx]
+	}
+
+	lineNumWidth := len(fmt.Sprintf("%d", len(lines)))
+	lineNumStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#585858"))
+	matchStyle := lipgloss.NewStyle().Background(lipgloss.Color("#3D3D00")).Foreground(lipgloss.Color("#FFFF00"))
+	currentMatchStyle := lipgloss.NewStyle().Background(lipgloss.Color("#FF9800")).Foreground(lipgloss.Color("#000000"))
+
+	var sb strings.Builder
+	for i, line := range lines {
+		sb.WriteString("  ")
+		if m.showLineNums {
+			num := fmt.Sprintf("%*d │ ", lineNumWidth, i+1)
+			sb.WriteString(lineNumStyle.Render(num))
+		}
+		if m.searchQuery != "" && matchSet[i] {
+			if i == currentMatch {
+				line = highlightLine(line, m.searchQuery, currentMatchStyle)
+			} else {
+				line = highlightLine(line, m.searchQuery, matchStyle)
+			}
+		}
+		sb.WriteString(line + "\n")
+	}
+
+	// Mode indicators
+	var indicators []string
+	if !m.prettyPrint {
+		indicators = append(indicators, "raw")
+	}
+	if m.wordWrap {
+		indicators = append(indicators, "wrap")
+	}
+	if m.searchQuery != "" && !m.searching {
+		indicators = append(indicators, "/"+m.searchQuery)
+	}
+	if len(indicators) > 0 {
+		sb.WriteString("  " + dimStyle.Render("["+strings.Join(indicators, " ")+"]") + "\n")
+	}
+
+	return sb.String()
+}
+
+// --- Collapsed previews ---
+
+func (m DetailModel) bodyPreview() string {
+	if m.response == nil || len(m.response.Body) == 0 {
+		return "(empty)"
+	}
+	raw := string(m.response.Body)
+	raw = strings.ReplaceAll(raw, "\n", " ")
+	raw = strings.Join(strings.Fields(raw), " ") // normalize whitespace
+	if len(raw) > 50 {
+		raw = raw[:50] + "..."
+	}
+	return raw
+}
+
+func (m DetailModel) bodyPreviewLines(n int) string {
+	if m.response == nil || len(m.response.Body) == 0 {
+		return ""
+	}
+	var raw string
+	if m.prettyPrint {
+		raw = formatBody(m.response, m.bodyWidth())
+	} else {
+		raw = string(m.response.Body)
+	}
+	lines := strings.Split(raw, "\n")
+	if len(lines) > n {
+		lines = lines[:n]
+	}
+	var sb strings.Builder
+	for _, l := range lines {
+		if len(l) > m.width-8 {
+			l = l[:m.width-8] + "..."
+		}
+		sb.WriteString("  " + l + "\n")
+	}
+	return strings.TrimRight(sb.String(), "\n")
+}
+
+func (m DetailModel) headersPreview() string {
+	if m.response == nil || len(m.response.Headers) == 0 {
+		return "(none)"
+	}
+	h := m.response.Headers[0]
+	return h.Key + ": " + h.Value
+}
+
+func (m DetailModel) headersPreviewLines(n int) string {
+	if m.response == nil || len(m.response.Headers) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	limit := n
+	if limit > len(m.response.Headers) {
+		limit = len(m.response.Headers)
+	}
+	for _, h := range m.response.Headers[:limit] {
+		sb.WriteString("  " + dimStyle.Render(h.Key+": "+h.Value) + "\n")
+	}
+	return strings.TrimRight(sb.String(), "\n")
+}
+
+func (m DetailModel) timingPreview() string {
+	if m.response == nil {
+		return ""
+	}
+	t := m.response.Timing
+	var parts []string
+	if t.DNS > 0 {
+		parts = append(parts, fmt.Sprintf("DNS %dms", t.DNS.Milliseconds()))
+	}
+	if t.TLS > 0 {
+		parts = append(parts, fmt.Sprintf("TLS %dms", t.TLS.Milliseconds()))
+	}
+	if t.TTFB > 0 {
+		parts = append(parts, fmt.Sprintf("TTFB %dms", t.TTFB.Milliseconds()))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, " → ")
+}
+
+// --- Sticky status ---
+
 func (m DetailModel) stickyStatus() string {
 	resp := m.response
 	if resp == nil {
 		return ""
 	}
 
-	// Status code with color
 	code := resp.StatusCode
 	var clr color.Color
 	var icon string
@@ -443,7 +804,6 @@ func (m DetailModel) stickyStatus() string {
 	statusStyle := lipgloss.NewStyle().Foreground(clr).Bold(true)
 	status := statusStyle.Render(fmt.Sprintf("%s %d %s", icon, code, resp.Status))
 
-	// Content type (shortened)
 	ct := resp.ContentType
 	if idx := strings.Index(ct, ";"); idx > 0 {
 		ct = strings.TrimSpace(ct[:idx])
@@ -451,7 +811,6 @@ func (m DetailModel) stickyStatus() string {
 	ct = strings.TrimPrefix(ct, "application/")
 	ct = strings.TrimPrefix(ct, "text/")
 
-	// Body size
 	size := len(resp.Body)
 	var sizeStr string
 	switch {
@@ -465,7 +824,6 @@ func (m DetailModel) stickyStatus() string {
 		sizeStr = fmt.Sprintf("%.1f MB", float64(size)/(1024*1024))
 	}
 
-	// Timing (total only)
 	timing := ""
 	if resp.Timing.Total > 0 {
 		ms := resp.Timing.Total.Milliseconds()
@@ -476,7 +834,6 @@ func (m DetailModel) stickyStatus() string {
 		}
 	}
 
-	// Compose: ✓ 200 OK  ──  json  2.4 KB  142ms
 	sep := dimStyle.Render(" ── ")
 	parts := []string{status}
 	if ct != "" {
@@ -486,131 +843,10 @@ func (m DetailModel) stickyStatus() string {
 	if timing != "" {
 		parts = append(parts, dimStyle.Render(timing))
 	}
-
 	return strings.Join(parts, sep)
 }
 
-func (m DetailModel) tabBar() string {
-	type tabDef struct {
-		key   string
-		label string
-		tab   detailTab
-	}
-	tabs := []tabDef{
-		{"1", "Body", tabBody},
-		{"2", "Headers", tabHeaders},
-		{"3", "Timing", tabTiming},
-	}
-
-	var sb strings.Builder
-	for i, t := range tabs {
-		label := t.key + ":" + t.label
-		if t.tab == m.tab {
-			sb.WriteString(lipgloss.NewStyle().
-				Underline(true).
-				Bold(true).
-				Foreground(lipgloss.Color("#CDD6F4")).
-				Render(label))
-		} else {
-			sb.WriteString(dimStyle.Render(label))
-		}
-		if i < len(tabs)-1 {
-			sb.WriteString("  ")
-		}
-	}
-
-	// Body tab indicators
-	if m.tab == tabBody && m.response != nil {
-		var extras []string
-		if !m.prettyPrint {
-			extras = append(extras, "raw")
-		}
-		if m.wordWrap {
-			extras = append(extras, "wrap")
-		}
-		if m.searchQuery != "" && !m.searching {
-			extras = append(extras, "/"+m.searchQuery)
-		}
-		if len(extras) > 0 {
-			sb.WriteString("  " + dimStyle.Render("["+strings.Join(extras, " ")+"]"))
-		}
-	}
-	return sb.String()
-}
-
-func (m DetailModel) getBodyText() string {
-	if m.response == nil || len(m.response.Body) == 0 {
-		return ""
-	}
-	if m.prettyPrint {
-		return formatBody(m.response, m.bodyWidth())
-	}
-	return string(m.response.Body)
-}
-
-func (m DetailModel) enhancedBodyView() string {
-	if m.response == nil || len(m.response.Body) == 0 {
-		return dimStyle.Render("(empty body)")
-	}
-
-	var raw string
-	if m.prettyPrint {
-		raw = formatBody(m.response, m.bodyWidth())
-	} else {
-		raw = string(m.response.Body)
-	}
-	lines := strings.Split(raw, "\n")
-
-	if m.wordWrap {
-		lines = wrapLines(lines, m.bodyWidth())
-	}
-
-	// Search match set
-	matchSet := make(map[int]bool)
-	for _, idx := range m.searchHits {
-		matchSet[idx] = true
-	}
-	currentMatch := -1
-	if len(m.searchHits) > 0 {
-		currentMatch = m.searchHits[m.searchIdx]
-	}
-
-	lineNumWidth := len(fmt.Sprintf("%d", len(lines)))
-	lineNumStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#585858"))
-	matchStyle := lipgloss.NewStyle().Background(lipgloss.Color("#3D3D00")).Foreground(lipgloss.Color("#FFFF00"))
-	currentMatchStyle := lipgloss.NewStyle().Background(lipgloss.Color("#FF9800")).Foreground(lipgloss.Color("#000000"))
-
-	var sb strings.Builder
-	for i, line := range lines {
-		if m.showLineNums {
-			num := fmt.Sprintf("%*d │ ", lineNumWidth, i+1)
-			sb.WriteString(lineNumStyle.Render(num))
-		}
-
-		if m.searchQuery != "" && matchSet[i] {
-			if i == currentMatch {
-				line = highlightLine(line, m.searchQuery, currentMatchStyle)
-			} else {
-				line = highlightLine(line, m.searchQuery, matchStyle)
-			}
-		}
-
-		sb.WriteString(line)
-		sb.WriteString("\n")
-	}
-	return sb.String()
-}
-
-func (m DetailModel) bodyWidth() int {
-	w := m.width - 4
-	if m.showLineNums {
-		w -= 8
-	}
-	if w < 20 {
-		w = 20
-	}
-	return w
-}
+// --- History view ---
 
 func (m DetailModel) historyView() string {
 	var sb strings.Builder
@@ -643,6 +879,17 @@ func (m DetailModel) historyView() string {
 	return sb.String()
 }
 
+func (m DetailModel) bodyWidth() int {
+	w := m.width - 6 // indent + border
+	if m.showLineNums {
+		w -= 8
+	}
+	if w < 20 {
+		w = 20
+	}
+	return w
+}
+
 // --- Rendering helpers ---
 
 func requestView(req *model.Request) string {
@@ -664,7 +911,7 @@ func headersView(resp *model.Response) string {
 	var sb strings.Builder
 	for _, h := range resp.Headers {
 		key := lipgloss.NewStyle().Foreground(lipgloss.Color("#89DCEB")).Render(h.Key)
-		sb.WriteString(fmt.Sprintf("%s: %s\n", key, h.Value))
+		sb.WriteString(fmt.Sprintf("  %s: %s\n", key, h.Value))
 	}
 	return sb.String()
 }
@@ -732,7 +979,7 @@ func timingView(resp *model.Response) string {
 	t := resp.Timing
 	total := t.Total.Milliseconds()
 	if total == 0 {
-		return dimStyle.Render("(no timing data)")
+		return dimStyle.Render("  (no timing data)")
 	}
 
 	barWidth := 24
@@ -761,7 +1008,7 @@ func timingView(resp *model.Response) string {
 		}
 		bar := lipgloss.NewStyle().Foreground(lipgloss.Color(p.clr)).Render(strings.Repeat("█", filled))
 		bar += dimStyle.Render(strings.Repeat("░", empty))
-		sb.WriteString(fmt.Sprintf("%s  %s  %dms\n", dimStyle.Render(p.name), bar, p.ms))
+		sb.WriteString(fmt.Sprintf("  %s  %s  %dms\n", dimStyle.Render(p.name), bar, p.ms))
 	}
 	return sb.String()
 }
@@ -829,4 +1076,11 @@ func highlightLine(line, query string, style lipgloss.Style) string {
 		pos = matchEnd
 	}
 	return sb.String()
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

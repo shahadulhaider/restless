@@ -119,6 +119,38 @@ Switch between dev, staging, and production with a single keystroke.
 
 Press `ctrl+e` in the TUI to switch. Variables are expanded as `{{token}}` in your requests.
 
+### Inline File Variables
+
+Define variables directly in your `.http` files — no env file needed for simple cases:
+
+```http
+@baseUrl = http://localhost:8000
+@token = my-dev-token
+
+GET {{baseUrl}}/users
+Authorization: Bearer {{token}}
+```
+
+Inline variables are overridden by environment variables when both exist.
+
+### Dynamic Variables
+
+Built-in variables that generate fresh values on each request:
+
+| Variable | Example Output |
+|----------|---------------|
+| `{{$uuid}}` | `a1b2c3d4-e5f6-7890-abcd-ef1234567890` |
+| `{{$timestamp}}` | `1712234567` |
+| `{{$isoTimestamp}}` | `2026-04-04T12:34:56Z` |
+| `{{$date}}` | `2026-04-04` |
+| `{{$randomInt}}` | `742` |
+| `{{$randomFloat}}` | `0.8372` |
+| `{{$randomBool}}` | `true` |
+| `{{$randomEmail}}` | `user42871@example.com` |
+| `{{$randomName}}` | `Alice` |
+| `{{$randomSlug}}` | `slug-4821-1234` |
+| `{{$datetime "2006-01-02"}}` | Custom Go time format |
+
 ### Request Chaining
 
 Pass data between requests using response references:
@@ -170,6 +202,22 @@ restless run api.http --env staging --fail-fast
 ### Cookie Jar
 
 Cookies persist automatically per environment. Login once, and subsequent requests carry the session — just like a browser.
+
+### Proxy & SSL
+
+Configure proxy and TLS settings per-request or globally:
+
+```http
+# @insecure
+# @proxy http://proxy.corp.com:8080
+GET https://internal-api.example.com/data
+```
+
+Or via CLI flags:
+
+```bash
+restless run api.http --insecure --proxy http://proxy:8080
+```
 
 ### Detailed Timing
 
@@ -247,7 +295,7 @@ Every response includes a timing waterfall: DNS, TCP connect, TLS handshake, tim
 
 ```
 restless [directory]                               Launch TUI
-restless run <file.http> [--env name] [--fail-fast] Run requests headlessly
+restless run <file.http> [--env name] [--fail-fast] [--insecure] [--proxy url] Run requests headlessly
 restless import postman  <file> [--output dir]      Import Postman collection
 restless import insomnia <file> [--output dir]      Import Insomnia export
 restless import bruno    <dir>  [--output dir]      Import Bruno collection
@@ -295,6 +343,8 @@ Content-Type: application/json
 | `# @no-cookie-jar` | Don't send/store cookies |
 | `# @timeout <seconds>` | Request timeout |
 | `# @connection-timeout <seconds>` | Connection timeout |
+| `# @insecure` | Skip TLS certificate verification |
+| `# @proxy <url>` | Use HTTP proxy for this request |
 
 Compatible with [JetBrains HTTP Client](https://www.jetbrains.com/help/idea/http-client-in-product-code-editor.html) and [VS Code REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client).
 

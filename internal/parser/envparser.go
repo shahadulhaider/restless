@@ -156,15 +156,34 @@ func ResolveEnvironment(envFile *model.EnvironmentFile, envName string) (map[str
 var datetimeRe = regexp.MustCompile(`\{\{\$datetime\s+"([^"]+)"\}\}`)
 
 func ResolveDynamicVars(s string) string {
+	now := time.Now()
+
 	s = strings.ReplaceAll(s, "{{$uuid}}", generateUUID())
-	s = strings.ReplaceAll(s, "{{$timestamp}}", strconv.FormatInt(time.Now().Unix(), 10))
+	s = strings.ReplaceAll(s, "{{$timestamp}}", strconv.FormatInt(now.Unix(), 10))
+	s = strings.ReplaceAll(s, "{{$isoTimestamp}}", now.UTC().Format(time.RFC3339))
+	s = strings.ReplaceAll(s, "{{$date}}", now.Format("2006-01-02"))
 	s = strings.ReplaceAll(s, "{{$randomInt}}", strconv.Itoa(mrand.IntN(1000)))
+	s = strings.ReplaceAll(s, "{{$randomFloat}}", strconv.FormatFloat(mrand.Float64(), 'f', 4, 64))
+	s = strings.ReplaceAll(s, "{{$randomBool}}", strconv.FormatBool(mrand.IntN(2) == 1))
+	s = strings.ReplaceAll(s, "{{$randomEmail}}", fmt.Sprintf("user%d@example.com", mrand.IntN(99999)))
+	s = strings.ReplaceAll(s, "{{$randomName}}", randomName())
+	s = strings.ReplaceAll(s, "{{$randomSlug}}", fmt.Sprintf("slug-%d-%d", mrand.IntN(9999), now.Unix()%10000))
+
 	s = datetimeRe.ReplaceAllStringFunc(s, func(match string) string {
 		sub := datetimeRe.FindStringSubmatch(match)
 		if len(sub) < 2 {
 			return match
 		}
-		return time.Now().Format(sub[1])
+		return now.Format(sub[1])
 	})
 	return s
+}
+
+var randomNames = []string{
+	"Alice", "Bob", "Charlie", "Diana", "Eve", "Frank",
+	"Grace", "Henry", "Iris", "Jack", "Kate", "Leo",
+}
+
+func randomName() string {
+	return randomNames[mrand.IntN(len(randomNames))]
 }

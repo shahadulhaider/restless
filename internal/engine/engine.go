@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"net/http/httptrace"
 	"strings"
 	"time"
@@ -30,7 +31,16 @@ func ExecuteWithJar(req *model.Request, jar http.CookieJar) (*model.Response, er
 		DialContext: (&net.Dialer{
 			Timeout: dialTimeout,
 		}).DialContext,
-		TLSClientConfig: &tls.Config{},
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: req.Metadata.Insecure,
+		},
+	}
+
+	if req.Metadata.Proxy != "" {
+		proxyURL, err := url.Parse(req.Metadata.Proxy)
+		if err == nil {
+			transport.Proxy = http.ProxyURL(proxyURL)
+		}
 	}
 
 	clientTimeout := 0 * time.Second

@@ -175,6 +175,8 @@ func importCmd() *cobra.Command {
 func runCmd() *cobra.Command {
 	var envName string
 	var failFast bool
+	var insecure bool
+	var proxyURL string
 
 	cmd := &cobra.Command{
 		Use:   "run <file.http>",
@@ -200,10 +202,28 @@ func runCmd() *cobra.Command {
 				envVars = make(map[string]string)
 			}
 
+			// Merge inline file variables
+			fileVars, _ := parser.ExtractFileVariablesFromFile(filePath)
+			for k, v := range fileVars {
+				if _, exists := envVars[k]; !exists {
+					envVars[k] = v
+				}
+			}
+
 			chainCtx := parser.NewChainContext()
 			cookies := engine.NewCookieManager()
 
-			for _, req := range reqs {
+			for i := range reqs {
+			// Apply CLI-level overrides
+			if insecure {
+				reqs[i].Metadata.Insecure = true
+			}
+			if proxyURL != "" {
+				reqs[i].Metadata.Proxy = proxyURL
+			}
+		}
+
+		for _, req := range reqs {
 				resolved, _ := parser.ResolveRequest(&req, envVars, chainCtx)
 				loaded, loadErr := parser.LoadFileBody(resolved, rootDir)
 				if loadErr != nil {
@@ -235,6 +255,8 @@ func runCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&envName, "env", "", "Environment name")
 	cmd.Flags().BoolVar(&failFast, "fail-fast", false, "Stop on first error")
+	cmd.Flags().BoolVar(&insecure, "insecure", false, "Skip TLS certificate verification")
+	cmd.Flags().StringVar(&proxyURL, "proxy", "", "HTTP proxy URL (e.g. http://proxy:8080)")
 	return cmd
 }
 

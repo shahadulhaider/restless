@@ -29,6 +29,12 @@ func SerializeRequest(req model.Request) string {
 	if req.Metadata.ConnTimeout > 0 {
 		sb.WriteString(fmt.Sprintf("# @connection-timeout %d\n", int(req.Metadata.ConnTimeout/time.Second)))
 	}
+	if req.Metadata.Insecure {
+		sb.WriteString("# @insecure\n")
+	}
+	if req.Metadata.Proxy != "" {
+		sb.WriteString(fmt.Sprintf("# @proxy %s\n", req.Metadata.Proxy))
+	}
 
 	// Request line: METHOD URL [HTTP/version]
 	if req.HTTPVersion != "" {

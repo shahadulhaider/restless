@@ -25,4 +25,6 @@ type RequestMetadata struct {
 	NoCookieJar bool
 	Timeout     time.Duration
 	ConnTimeout time.Duration
+	Insecure    bool   // skip TLS verification
+	Proxy       string // proxy URL (http://proxy:port)
 }

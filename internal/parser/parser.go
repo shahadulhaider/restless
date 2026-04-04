@@ -199,5 +199,9 @@ func applyMetadataSingle(req *model.Request, m Token) {
 		if err == nil {
 			req.Metadata.ConnTimeout = time.Duration(n) * time.Second
 		}
+	case val == "insecure":
+		req.Metadata.Insecure = true
+	case strings.HasPrefix(val, "proxy "):
+		req.Metadata.Proxy = strings.TrimSpace(strings.TrimPrefix(val, "proxy "))
 	}
 }

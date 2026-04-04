@@ -341,7 +341,21 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 			envName := m.currentEnv
 			rootDir := m.rootDir
 			return m, func() tea.Msg {
-				resolved, _ := parser.ResolveRequest(req, envVars, chainCtx)
+				// Merge file-level inline variables with env variables
+				mergedVars := make(map[string]string)
+				for k, v := range envVars {
+					mergedVars[k] = v
+				}
+				if req.SourceFile != "" {
+					if fileVars, err := parser.ExtractFileVariablesFromFile(req.SourceFile); err == nil {
+						for k, v := range fileVars {
+							if _, exists := mergedVars[k]; !exists {
+								mergedVars[k] = v // file vars don't override env vars
+							}
+						}
+					}
+				}
+				resolved, _ := parser.ResolveRequest(req, mergedVars, chainCtx)
 				loaded, err := parser.LoadFileBody(resolved, rootDir)
 				if err != nil {
 					loaded = resolved

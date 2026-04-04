@@ -76,7 +76,9 @@ func (l *Lexer) Tokenize() []Token {
 
 		switch cur {
 		case stateStart:
-			if strings.HasPrefix(trimmed, "###") {
+			if strings.HasPrefix(trimmed, "@") && strings.Contains(trimmed, "=") {
+				// Inline file variable: @varName = value — skip (handled by ExtractFileVariables)
+			} else if strings.HasPrefix(trimmed, "###") {
 				tokens = append(tokens, Token{Type: TokenRequestSeparator, Value: trimmed, Line: lineNum})
 				// stays in stateStart looking for next request line
 			} else if strings.HasPrefix(trimmed, "# @") || strings.HasPrefix(trimmed, "// @") {

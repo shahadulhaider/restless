@@ -11,9 +11,11 @@ type Request struct {
 	Body        string
 	BodyFile    string
 	Metadata    RequestMetadata
-	Assertions  []Assertion
-	SourceFile  string
-	SourceLine  int
+	Assertions         []Assertion
+	PreRequestScript   string
+	PostResponseScript string
+	SourceFile         string
+	SourceLine         int
 }
 
 // Assertion defines a response assertion declared via # @assert.

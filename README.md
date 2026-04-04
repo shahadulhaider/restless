@@ -74,6 +74,7 @@ restless run api.http
 - **Vim-style commands** — `zo`/`zc`/`zR`/`zM` folds, `yb`/`yh`/`ya`/`yc` yank
 - **Cookie jar** — cookies persist per environment automatically
 - **Response history** — browse past responses with `h`, diff with `d`
+- **Pre-request & post-response scripting** — JavaScript (ES5.1) via `# @pre-request { ... }` and `# @post-response { ... }` with crypto builtins (hmac, sha256, base64)
 - **Proxy & SSL** — `# @insecure`, `# @proxy`, `--insecure`, `--proxy` flags
 - **Readline/emacs editing** — `Ctrl+A/E/W/U/K`, arrow keys, word navigation in editor
 

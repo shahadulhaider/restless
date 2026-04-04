@@ -46,8 +46,25 @@ func parseTokens(tokens []Token, sourcePath string) ([]model.Request, error) {
 			i++
 
 		case TokenMetadata:
-			pendingMeta = append(pendingMeta, tok)
-			i++
+			// Check for script block start
+			val := extractMetaValue(tok.Value)
+			if strings.HasPrefix(val, "pre-request {") || strings.HasPrefix(val, "post-response {") {
+				scriptLines, consumed := collectScriptBlock(tokens, i)
+				scriptType := "pre-request"
+				if strings.HasPrefix(val, "post-response") {
+					scriptType = "post-response"
+				}
+				// Store as a special metadata token with the full script
+				pendingMeta = append(pendingMeta, Token{
+					Type:  TokenMetadata,
+					Value: "# @" + scriptType + "-script " + strings.Join(scriptLines, "\n"),
+					Line:  tok.Line,
+				})
+				i += consumed
+			} else {
+				pendingMeta = append(pendingMeta, tok)
+				i++
+			}
 
 		case TokenComment:
 			i++
@@ -71,6 +88,54 @@ func parseTokens(tokens []Token, sourcePath string) ([]model.Request, error) {
 	}
 
 	return requests, nil
+}
+
+// extractMetaValue strips the comment prefix and @ from a metadata token value.
+func extractMetaValue(s string) string {
+	s = strings.TrimPrefix(s, "# ")
+	s = strings.TrimPrefix(s, "// ")
+	s = strings.TrimPrefix(s, "@")
+	return s
+}
+
+// collectScriptBlock collects lines of a script block from # @pre-request { to # }
+// Returns the script lines (with # prefix stripped) and total tokens consumed.
+// Works with both metadata and comment tokens (script content in body state is comments).
+func collectScriptBlock(tokens []Token, startIdx int) ([]string, int) {
+	var lines []string
+	i := startIdx + 1 // skip the opening line
+	consumed := 1
+
+	for i < len(tokens) {
+		tok := tokens[i]
+		if tok.Type == TokenRequestSeparator || tok.Type == TokenEOF {
+			break
+		}
+		if tok.Type == TokenMetadata || tok.Type == TokenComment {
+			line := tok.Value
+			// Strip comment prefix
+			if strings.HasPrefix(line, "# ") {
+				line = line[2:]
+			} else if strings.HasPrefix(line, "// ") {
+				line = line[3:]
+			} else if line == "#" {
+				line = ""
+			}
+			trimmed := strings.TrimSpace(line)
+
+			// Check for closing brace
+			if trimmed == "}" {
+				i++
+				consumed++
+				break
+			}
+			lines = append(lines, line)
+		}
+		// Skip body tokens between script lines (e.g. empty lines)
+		i++
+		consumed++
+	}
+	return lines, consumed
 }
 
 func parseRequest(tokens []Token, start int, sourcePath string, meta []Token) (model.Request, int, error) {
@@ -122,9 +187,26 @@ func parseRequest(tokens []Token, start int, sourcePath string, meta []Token) (m
 				consumed++
 			}
 		case TokenMetadata:
-			applyMetadataSingle(&req, t)
-			i++
-			consumed++
+			val := extractMetaValue(t.Value)
+			if strings.HasPrefix(val, "pre-request {") || strings.HasPrefix(val, "post-response {") {
+				scriptType := "pre-request"
+				if strings.HasPrefix(val, "post-response") {
+					scriptType = "post-response"
+				}
+				scriptLines, sc := collectScriptBlock(tokens, i)
+				scriptText := strings.Join(scriptLines, "\n")
+				if scriptType == "pre-request" {
+					req.PreRequestScript = scriptText
+				} else {
+					req.PostResponseScript = scriptText
+				}
+				i += sc
+				consumed += sc
+			} else {
+				applyMetadataSingle(&req, t)
+				i++
+				consumed++
+			}
 		case TokenComment:
 			i++
 			consumed++
@@ -136,7 +218,7 @@ func parseRequest(tokens []Token, start int, sourcePath string, meta []Token) (m
 			req.BodyFile = fileRef
 			i += bodyConsumed
 			consumed += bodyConsumed
-			return req, consumed, nil
+			// Continue to process metadata after body (e.g. @assert, @post-response)
 		case TokenRequestSeparator, TokenEOF:
 			return req, consumed, nil
 		default:
@@ -153,7 +235,7 @@ func collectBody(tokens []Token, start int) (lines []string, consumed int, fileR
 	for i < len(tokens) {
 		t := tokens[i]
 		switch t.Type {
-		case TokenRequestSeparator, TokenEOF:
+		case TokenRequestSeparator, TokenEOF, TokenMetadata:
 			return lines, consumed, fileRef
 		case TokenFileRef:
 			fileRef = t.Value
@@ -243,5 +325,13 @@ func applyMetadataSingle(req *model.Request, m Token) {
 		if a, ok := parseAssertion(raw); ok {
 			req.Assertions = append(req.Assertions, a)
 		}
+	case strings.HasPrefix(val, "pre-request-script "):
+		req.PreRequestScript = strings.TrimPrefix(val, "pre-request-script ")
+	case strings.HasPrefix(val, "post-response-script "):
+		req.PostResponseScript = strings.TrimPrefix(val, "post-response-script ")
+	case strings.HasPrefix(val, "pre-request {"):
+		// Script block start — handled by collectScriptBlock in parseTokens
+	case strings.HasPrefix(val, "post-response {"):
+		// Script block start — handled by collectScriptBlock in parseTokens
 	}
 }

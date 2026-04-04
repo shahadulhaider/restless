@@ -11,6 +11,7 @@ import (
 	"github.com/shahadulhaider/restless/internal/assert"
 	"github.com/shahadulhaider/restless/internal/engine"
 	"github.com/shahadulhaider/restless/internal/parser"
+	"github.com/shahadulhaider/restless/internal/script"
 )
 
 // RunConfig holds all configuration for a headless run.
@@ -135,6 +136,27 @@ func Run(cfg RunConfig) (RunResult, error) {
 				loaded = resolved
 			}
 
+			// Run pre-request script
+			if loaded.PreRequestScript != "" {
+				scriptCtx := &script.ScriptContext{
+					Request: loaded,
+					EnvVars: iterVars,
+					LogOut:  cfg.ErrOutput,
+				}
+				if err := script.RunPreRequest(loaded.PreRequestScript, scriptCtx); err != nil {
+					fmt.Fprintf(cfg.ErrOutput, "\033[31m✗\033[0m %s %s: pre-request script: %v\n", loaded.Method, loaded.URL, err)
+					result.AnyFailed = true
+					if cfg.FailFast {
+						return result, nil
+					}
+					continue
+				}
+				// Merge script-set variables
+				for k, v := range scriptCtx.SetVars {
+					iterVars[k] = v
+				}
+			}
+
 			jar := cookies.JarForEnv(cfg.EnvName)
 			resp, execErr := engine.ExecuteWithJar(loaded, jar)
 			if execErr != nil {
@@ -194,6 +216,23 @@ func Run(cfg RunConfig) (RunResult, error) {
 
 			if !allOk && cfg.FailFast {
 				return result, nil
+			}
+
+			// Run post-response script
+			if loaded.PostResponseScript != "" {
+				scriptCtx := &script.ScriptContext{
+					Request:  loaded,
+					Response: resp,
+					EnvVars:  iterVars,
+					LogOut:   cfg.ErrOutput,
+				}
+				if err := script.RunPostResponse(loaded.PostResponseScript, scriptCtx); err != nil {
+					fmt.Fprintf(cfg.ErrOutput, "[script] post-response error: %v\n", err)
+				}
+				// Merge script-set variables for subsequent requests
+				for k, v := range scriptCtx.SetVars {
+					iterVars[k] = v
+				}
 			}
 		}
 

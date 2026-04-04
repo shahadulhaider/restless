@@ -136,6 +136,12 @@ func (l *Lexer) Tokenize() []Token {
 			if strings.HasPrefix(trimmed, "###") {
 				tokens = append(tokens, Token{Type: TokenRequestSeparator, Value: trimmed, Line: lineNum})
 				cur = stateStart
+			} else if strings.HasPrefix(trimmed, "# @") || strings.HasPrefix(trimmed, "// @") {
+				// Metadata after body (e.g. @assert, @post-response)
+				tokens = append(tokens, Token{Type: TokenMetadata, Value: trimmed, Line: lineNum})
+			} else if strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "//") {
+				// Comment in body area (could be script block content)
+				tokens = append(tokens, Token{Type: TokenComment, Value: trimmed, Line: lineNum})
 			} else if strings.HasPrefix(trimmed, "< ") {
 				// File reference
 				path := strings.TrimSpace(trimmed[2:])

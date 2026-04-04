@@ -98,3 +98,37 @@ GET https://example.com/api
 	assert.Equal(t, "header.X-Id", a[5].Target)
 	assert.Equal(t, "exists", a[5].Operator)
 }
+
+func TestParseScriptBlocks(t *testing.T) {
+	content := []byte(`# @name test
+# @pre-request {
+#   setHeader("X-Timestamp", String(timestamp()));
+#   var sig = hmac_sha256(env.secret, request.body);
+#   setHeader("X-Sig", sig);
+# }
+POST https://example.com/api
+Content-Type: application/json
+
+{"data": "value"}
+
+# @post-response {
+#   if (response.status === 200) {
+#     setVar("token", response.body.token);
+#   }
+# }
+# @assert status == 200
+`)
+	reqs, err := ParseBytes(content, "test.http")
+	require.NoError(t, err)
+	require.Len(t, reqs, 1)
+
+	assert.NotEmpty(t, reqs[0].PreRequestScript, "pre-request script should be parsed")
+	assert.Contains(t, reqs[0].PreRequestScript, "setHeader")
+	assert.Contains(t, reqs[0].PreRequestScript, "hmac_sha256")
+
+	assert.NotEmpty(t, reqs[0].PostResponseScript, "post-response script should be parsed")
+	assert.Contains(t, reqs[0].PostResponseScript, "setVar")
+	assert.Contains(t, reqs[0].PostResponseScript, "response.body.token")
+
+	assert.Len(t, reqs[0].Assertions, 1)
+}

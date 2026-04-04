@@ -15,6 +15,7 @@ import (
 	"github.com/shahadulhaider/restless/internal/engine"
 	"github.com/shahadulhaider/restless/internal/exporter"
 	"github.com/shahadulhaider/restless/internal/history"
+	"github.com/shahadulhaider/restless/internal/script"
 	"github.com/shahadulhaider/restless/internal/model"
 	"github.com/shahadulhaider/restless/internal/parser"
 	"github.com/shahadulhaider/restless/internal/writer"
@@ -382,8 +383,27 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 				if err != nil {
 					loaded = resolved
 				}
+				// Run pre-request script
+				if loaded.PreRequestScript != "" {
+					scriptCtx := &script.ScriptContext{
+						Request: loaded,
+						EnvVars: mergedVars,
+					}
+					if scriptErr := script.RunPreRequest(loaded.PreRequestScript, scriptCtx); scriptErr != nil {
+						return responseReceived{err: fmt.Errorf("pre-request script: %w", scriptErr)}
+					}
+				}
 				jar := cookies.JarForEnv(envName)
 				resp, err := engine.ExecuteWithJar(loaded, jar)
+				// Run post-response script
+				if err == nil && loaded.PostResponseScript != "" {
+					scriptCtx := &script.ScriptContext{
+						Request:  loaded,
+						Response: resp,
+						EnvVars:  mergedVars,
+					}
+					_ = script.RunPostResponse(loaded.PostResponseScript, scriptCtx)
+				}
 				return responseReceived{resp: resp, err: err}
 			}
 		}

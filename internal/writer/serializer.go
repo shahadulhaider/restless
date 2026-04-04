@@ -38,6 +38,20 @@ func SerializeRequest(req model.Request) string {
 	for _, a := range req.Assertions {
 		sb.WriteString(fmt.Sprintf("# @assert %s\n", a.Raw))
 	}
+	if req.PreRequestScript != "" {
+		sb.WriteString("# @pre-request {\n")
+		for _, line := range strings.Split(req.PreRequestScript, "\n") {
+			sb.WriteString(fmt.Sprintf("#   %s\n", line))
+		}
+		sb.WriteString("# }\n")
+	}
+	if req.PostResponseScript != "" {
+		sb.WriteString("# @post-response {\n")
+		for _, line := range strings.Split(req.PostResponseScript, "\n") {
+			sb.WriteString(fmt.Sprintf("#   %s\n", line))
+		}
+		sb.WriteString("# }\n")
+	}
 
 	// Request line: METHOD URL [HTTP/version]
 	if req.HTTPVersion != "" {

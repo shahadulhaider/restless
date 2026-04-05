@@ -492,7 +492,6 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
-
 		case "N":
 			// Create new .http file in current directory
 			dir := m.currentDir()
@@ -584,9 +583,9 @@ func (m App) View() tea.View {
 		case m.focus == PaneDetail:
 			if m.detail.response != nil {
 				if m.detail.mode == modeResponse {
-					statusLine = " [r]req [s]resp │ 1/2/3:fold │ space:toggle │ y:yank(b/h/a/c) │ p:pretty │ f:find │ Enter:send"
+					statusLine = " [r]req [s]resp │ 1/2/3:fold │ v:select │ y:yank(b/h/a/c/l/p/v/i) │ gp:path │ f:find │ Enter:send"
 				} else {
-					statusLine = " [r]req [s]resp │ 1/2/3:fold │ space:toggle │ y:yank(b/h/a/c) │ Enter:send │ e:edit"
+					statusLine = " [r]req [s]resp │ 1/2/3:fold │ v:select │ y:yank(b/h/a/c/l/p/v/i) │ gp:path │ Enter:send"
 				}
 			} else {
 				statusLine = " Enter:send │ e:edit │ h:history │ q:quit"

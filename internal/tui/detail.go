@@ -11,13 +11,15 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/tidwall/pretty"
 
+	"github.com/tidwall/gjson"
+
 	"github.com/shahadulhaider/restless/internal/assert"
 	"github.com/shahadulhaider/restless/internal/engine"
 	"github.com/shahadulhaider/restless/internal/exporter"
 	"github.com/shahadulhaider/restless/internal/history"
-	"github.com/shahadulhaider/restless/internal/script"
 	"github.com/shahadulhaider/restless/internal/model"
 	"github.com/shahadulhaider/restless/internal/parser"
+	"github.com/shahadulhaider/restless/internal/script"
 	"github.com/shahadulhaider/restless/internal/writer"
 )
 
@@ -25,7 +27,7 @@ import (
 type section int
 
 const (
-	sectionBody    section = iota
+	sectionBody section = iota
 	sectionHeaders
 	sectionTiming // response only; request uses sectionMeta in slot 3
 )
@@ -34,7 +36,7 @@ const (
 type detailMode int
 
 const (
-	modeRequest  detailMode = iota
+	modeRequest detailMode = iota
 	modeResponse
 )
 
@@ -62,8 +64,8 @@ type DetailModel struct {
 	diffText       string
 
 	// Request accordion state
-	reqFolds   [4]bool // Body, Headers, Metadata, Assertions expanded
-	reqOffset  int
+	reqFolds  [4]bool // Body, Headers, Metadata, Assertions expanded
+	reqOffset int
 
 	// Response accordion state
 	respFolds  [4]bool // Body, Headers, Timing, Assertions expanded
@@ -82,6 +84,17 @@ type DetailModel struct {
 	searchQuery  string
 	searchHits   []int
 	searchIdx    int
+
+	// Visual selection mode
+	selecting    bool
+	selectAnchor int // line index where selection started
+
+	// JSON path jump
+	jumpingPath bool
+	jumpQuery   string
+
+	// g-prefix (for gp)
+	pendingG bool
 }
 
 type responseReceived struct {
@@ -110,8 +123,8 @@ func NewDetailModel(rootDir string, chainCtx *parser.ChainContext, cookies *engi
 		showLineNums: true,
 		prettyPrint:  true,
 		mode:         modeRequest,
-		reqFolds:     [4]bool{true, false, false, false},  // body expanded
-		respFolds:    [4]bool{true, false, false, false},   // body expanded
+		reqFolds:     [4]bool{true, false, false, false}, // body expanded
+		respFolds:    [4]bool{true, false, false, false}, // body expanded
 	}
 }
 
@@ -217,6 +230,12 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 		if m.searching {
 			return m.updateSearch(msg)
 		}
+		if m.selecting {
+			return m.updateSelecting(msg)
+		}
+		if m.jumpingPath {
+			return m.updateJumpPath(msg)
+		}
 		return m.updateNormal(msg)
 	}
 	return m, nil
@@ -284,8 +303,139 @@ func (m DetailModel) updateSearch(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 	return m, nil
 }
 
+func (m DetailModel) updateSelecting(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.selecting = false
+	case "j", "down":
+		m.setOffset(m.offset() + 1)
+	case "k", "up":
+		if m.offset() > 0 {
+			m.setOffset(m.offset() - 1)
+		}
+	case "ctrl+d":
+		m.setOffset(m.offset() + m.viewableHeight()/2)
+	case "ctrl+u":
+		off := m.offset() - m.viewableHeight()/2
+		if off < 0 {
+			off = 0
+		}
+		m.setOffset(off)
+	case "G":
+		m.setOffset(999999)
+	case "y":
+		text := m.selectedText()
+		m.selecting = false
+		if text == "" {
+			return m, nil
+		}
+		return m, func() tea.Msg {
+			err := exporter.CopyToClipboard(text)
+			return yankResult{label: "selection", err: err}
+		}
+	}
+	return m, nil
+}
+
+func (m DetailModel) selectedText() string {
+	content := m.currentAccordionContent()
+	lines := strings.Split(content, "\n")
+	lo, hi := m.selectionRange()
+	if lo < 0 {
+		lo = 0
+	}
+	if hi >= len(lines) {
+		hi = len(lines) - 1
+	}
+	if lo > hi {
+		return ""
+	}
+	var sb strings.Builder
+	for i := lo; i <= hi; i++ {
+		sb.WriteString(strings.TrimSpace(stripANSI(lines[i])))
+		if i < hi {
+			sb.WriteString("\n")
+		}
+	}
+	return sb.String()
+}
+
+func (m DetailModel) selectionRange() (int, int) {
+	a, b := m.selectAnchor, m.offset()
+	if a > b {
+		return b, a
+	}
+	return a, b
+}
+
+func (m DetailModel) updateJumpPath(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.jumpingPath = false
+	case "enter":
+		m.jumpingPath = false
+		if m.jumpQuery != "" {
+			m.jumpToPath(m.jumpQuery)
+		}
+	case "backspace":
+		if len(m.jumpQuery) > 0 {
+			_, size := utf8.DecodeLastRuneInString(m.jumpQuery)
+			m.jumpQuery = m.jumpQuery[:len(m.jumpQuery)-size]
+		}
+	default:
+		if k := msg.String(); len([]rune(k)) == 1 {
+			m.jumpQuery += k
+		}
+	}
+	return m, nil
+}
+
+func (m *DetailModel) jumpToPath(target string) {
+	var body string
+	if m.mode == modeResponse && m.response != nil && len(m.response.Body) > 0 {
+		body = string(m.response.Body)
+	} else if m.mode == modeRequest && m.request != nil && m.request.Body != "" {
+		body = m.request.Body
+	}
+	if body == "" {
+		return
+	}
+
+	folds := m.folds()
+	if !folds[0] {
+		m.expandSection(sectionBody)
+	}
+
+	content := m.currentAccordionContent()
+	lines := strings.Split(content, "\n")
+	target = strings.TrimSpace(target)
+	if !strings.HasPrefix(target, "$") {
+		target = "$." + target
+	}
+	for i := range lines {
+		path := jsonLineToPath(body, i)
+		if path == target || strings.HasSuffix(path, strings.TrimPrefix(target, "$")) {
+			m.setOffset(i)
+			return
+		}
+	}
+}
+
 func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 	key := msg.String()
+
+	// g-prefix
+	if m.pendingG {
+		m.pendingG = false
+		switch key {
+		case "g":
+			m.setOffset(0)
+		case "p":
+			m.jumpingPath = true
+			m.jumpQuery = ""
+		}
+		return m, nil
+	}
 
 	// z-prefix
 	if m.pendingZ {
@@ -329,6 +479,10 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 		return m, nil
 	case "y":
 		m.pendingY = true
+		return m, nil
+	case "v":
+		m.selecting = true
+		m.selectAnchor = m.offset()
 		return m, nil
 
 	// Request/Response toggle
@@ -438,7 +592,8 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 		}
 		m.setOffset(off)
 	case "g":
-		m.setOffset(0)
+		m.pendingG = true
+		return m, nil
 	case "G":
 		m.setOffset(999999)
 
@@ -527,71 +682,80 @@ func (m DetailModel) diffView() string {
 func (m DetailModel) handleYank(key string) (DetailModel, tea.Cmd) {
 	var text, label string
 
-	if m.mode == modeRequest {
-		// Yank from request
-		switch key {
-		case "b":
-			if m.request != nil {
-				text = m.request.Body
-				label = "request body"
-			}
-		case "h":
-			if m.request != nil {
-				var sb strings.Builder
-				for _, h := range m.request.Headers {
-					sb.WriteString(h.Key + ": " + h.Value + "\n")
+	switch key {
+	case "l":
+		text, label = m.yankCurrentLine()
+	case "p":
+		text, label = m.yankJSONPath()
+	case "v":
+		text, label = m.yankJSONValue()
+	case "i":
+		text, label = m.yankIndividualItem()
+	default:
+		if m.mode == modeRequest {
+			switch key {
+			case "b":
+				if m.request != nil {
+					text = m.request.Body
+					label = "request body"
 				}
-				text = sb.String()
-				label = "request headers"
-			}
-		case "a":
-			if m.request != nil {
-				text = writer.SerializeRequest(*m.request)
-				label = "request"
-			}
-		case "c":
-			if m.request != nil {
-				text = exporter.ToCurl(*m.request)
-				label = "curl"
-			}
-		}
-	} else {
-		// Yank from response
-		switch key {
-		case "b":
-			if m.response != nil {
-				if m.prettyPrint {
-					text = formatBodyPlain(m.response)
-				} else {
-					text = string(m.response.Body)
+			case "h":
+				if m.request != nil {
+					var sb strings.Builder
+					for _, h := range m.request.Headers {
+						sb.WriteString(h.Key + ": " + h.Value + "\n")
+					}
+					text = sb.String()
+					label = "request headers"
 				}
-				label = "body"
-			}
-		case "h":
-			if m.response != nil {
-				var sb strings.Builder
-				for _, h := range m.response.Headers {
-					sb.WriteString(h.Key + ": " + h.Value + "\n")
+			case "a":
+				if m.request != nil {
+					text = writer.SerializeRequest(*m.request)
+					label = "request"
 				}
-				text = sb.String()
-				label = "headers"
-			}
-		case "a":
-			if m.response != nil {
-				var sb strings.Builder
-				sb.WriteString(fmt.Sprintf("HTTP %d %s\n", m.response.StatusCode, m.response.Status))
-				for _, h := range m.response.Headers {
-					sb.WriteString(h.Key + ": " + h.Value + "\n")
+			case "c":
+				if m.request != nil {
+					text = exporter.ToCurl(*m.request)
+					label = "curl"
 				}
-				sb.WriteString("\n")
-				sb.WriteString(string(m.response.Body))
-				text = sb.String()
-				label = "response"
 			}
-		case "c":
-			if m.request != nil {
-				text = exporter.ToCurl(*m.request)
-				label = "curl"
+		} else {
+			switch key {
+			case "b":
+				if m.response != nil {
+					if m.prettyPrint {
+						text = formatBodyPlain(m.response)
+					} else {
+						text = string(m.response.Body)
+					}
+					label = "body"
+				}
+			case "h":
+				if m.response != nil {
+					var sb strings.Builder
+					for _, h := range m.response.Headers {
+						sb.WriteString(h.Key + ": " + h.Value + "\n")
+					}
+					text = sb.String()
+					label = "headers"
+				}
+			case "a":
+				if m.response != nil {
+					var sb strings.Builder
+					sb.WriteString(fmt.Sprintf("HTTP %d %s\n", m.response.StatusCode, m.response.Status))
+					for _, h := range m.response.Headers {
+						sb.WriteString(h.Key + ": " + h.Value + "\n")
+					}
+					sb.WriteString("\n")
+					sb.WriteString(string(m.response.Body))
+					text = sb.String()
+					label = "response"
+				}
+			case "c":
+				if m.request != nil {
+					text = exporter.ToCurl(*m.request)
+					label = "curl"
+				}
 			}
 		}
 	}
@@ -603,6 +767,89 @@ func (m DetailModel) handleYank(key string) (DetailModel, tea.Cmd) {
 		err := exporter.CopyToClipboard(text)
 		return yankResult{label: label, err: err}
 	}
+}
+
+func (m DetailModel) yankCurrentLine() (string, string) {
+	content := m.currentAccordionContent()
+	lines := strings.Split(content, "\n")
+	off := m.offset()
+	if off < 0 || off >= len(lines) {
+		return "", ""
+	}
+	plain := strings.TrimSpace(stripANSI(lines[off]))
+	if plain == "" {
+		return "", ""
+	}
+	return plain, "line"
+}
+
+func (m DetailModel) yankJSONPath() (string, string) {
+	var body string
+	if m.mode == modeResponse && m.response != nil && len(m.response.Body) > 0 {
+		body = string(m.response.Body)
+	} else if m.mode == modeRequest && m.request != nil && m.request.Body != "" {
+		body = m.request.Body
+	}
+	if body == "" {
+		return "", ""
+	}
+	path := jsonLineToPath(body, m.offset())
+	if path == "$" {
+		return "$", "JSON path"
+	}
+	return path, "JSON path"
+}
+
+func (m DetailModel) yankJSONValue() (string, string) {
+	var body string
+	if m.mode == modeResponse && m.response != nil && len(m.response.Body) > 0 {
+		body = string(m.response.Body)
+	} else if m.mode == modeRequest && m.request != nil && m.request.Body != "" {
+		body = m.request.Body
+	}
+	if body == "" {
+		return "", ""
+	}
+	path := jsonLineToPath(body, m.offset())
+	if path == "$" {
+		return body, "JSON root"
+	}
+	gjsonPath := strings.TrimPrefix(path, "$.")
+	gjsonPath = strings.ReplaceAll(gjsonPath, "[", ".")
+	gjsonPath = strings.ReplaceAll(gjsonPath, "]", "")
+	result := gjson.Get(body, gjsonPath)
+	if !result.Exists() {
+		return "", ""
+	}
+	val := result.String()
+	if result.Type == gjson.JSON {
+		val = result.Raw
+	}
+	return val, "JSON value"
+}
+
+func (m DetailModel) yankIndividualItem() (string, string) {
+	sec := m.sectionAtOffset()
+	if sec == sectionHeaders {
+		var headers []model.Header
+		if m.mode == modeRequest && m.request != nil {
+			headers = m.request.Headers
+		} else if m.mode == modeResponse && m.response != nil {
+			headers = m.response.Headers
+		}
+		content := m.currentAccordionContent()
+		lines := strings.Split(content, "\n")
+		off := m.offset()
+		if off >= 0 && off < len(lines) {
+			plain := strings.TrimSpace(stripANSI(lines[off]))
+			for _, h := range headers {
+				if strings.Contains(plain, h.Key) && strings.Contains(plain, h.Value) {
+					return h.Key + ": " + h.Value, "header " + h.Key
+				}
+			}
+		}
+	}
+	return m.yankCurrentLine()
 }
 
 // --- Code Generation ---
@@ -742,8 +989,17 @@ func (m DetailModel) View() string {
 	if end > len(lines) {
 		end = len(lines)
 	}
-	for _, l := range lines[off:end] {
-		sb.WriteString(l + "\n")
+
+	selectStyle := lipgloss.NewStyle().Background(lipgloss.Color("#3D3D5C")).Foreground(lipgloss.Color("#FFFFFF"))
+	selLo, selHi := m.selectionRange()
+	for i, l := range lines[off:end] {
+		lineIdx := off + i
+		if m.selecting && lineIdx >= selLo && lineIdx <= selHi {
+			plain := stripANSI(l)
+			sb.WriteString(selectStyle.Render(plain) + "\n")
+		} else {
+			sb.WriteString(l + "\n")
+		}
 	}
 
 	// Scroll indicator
@@ -768,11 +1024,22 @@ func (m DetailModel) View() string {
 		}
 		sb.WriteString(lipgloss.NewStyle().Foreground(colorBorderActive).Render("find: " + m.searchQuery + "█" + matchInfo))
 	}
+	if m.selecting {
+		count := selHi - selLo + 1
+		sb.WriteString("\n" + lipgloss.NewStyle().Foreground(colorBorderActive).Render(
+			fmt.Sprintf("-- VISUAL -- %d line(s) selected  │  y:copy  esc:cancel", count)))
+	}
+	if m.jumpingPath {
+		sb.WriteString("\n" + lipgloss.NewStyle().Foreground(colorBorderActive).Render("path: "+m.jumpQuery+"█"))
+	}
+	if m.pendingG {
+		sb.WriteString("\n" + dimStyle.Render("g- (g:top  p:jump to path)"))
+	}
 	if m.pendingZ {
 		sb.WriteString("\n" + dimStyle.Render("z-"))
 	}
 	if m.pendingY {
-		sb.WriteString("\n" + dimStyle.Render("y- (b:body  h:headers  a:all  c:curl  g:generate code)"))
+		sb.WriteString("\n" + dimStyle.Render("y- (b:body  h:headers  a:all  c:curl  l:line  p:path  v:value  i:item  g:generate)"))
 	}
 	if m.pendingYG {
 		sb.WriteString("\n" + dimStyle.Render("yg- (p:python  j:javascript  g:go  v:java  r:ruby  h:httpie  c:curl  w:powershell)"))

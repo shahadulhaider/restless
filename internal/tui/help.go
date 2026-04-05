@@ -150,7 +150,16 @@ func fullKeybindingReference() string {
 	writeKeys(&sb, key, [][2]string{
 		{"j/k / ↑/↓", "Scroll line by line"},
 		{"Ctrl+D / Ctrl+U", "Scroll half page down / up"},
-		{"g / G", "Jump to top / bottom"},
+		{"gg / G", "Jump to top / bottom"},
+	})
+
+	sb.WriteString("\n" + section.Render("Detail Pane — Selection") + "\n")
+	writeKeys(&sb, key, [][2]string{
+		{"v", "Enter visual selection mode"},
+		{"j/k (in visual)", "Extend selection range"},
+		{"y (in visual)", "Copy selected lines to clipboard"},
+		{"Esc (in visual)", "Cancel selection"},
+		{"gp", "Jump to JSON path (type path, Enter to jump)"},
 	})
 
 	sb.WriteString("\n" + section.Render("Detail Pane — Body Viewer") + "\n")
@@ -168,6 +177,10 @@ func fullKeybindingReference() string {
 		{"yh", "Copy headers"},
 		{"ya", "Copy all (full request or response)"},
 		{"yc", "Copy as curl command"},
+		{"yl", "Copy current line"},
+		{"yp", "Copy JSON path at cursor"},
+		{"yv", "Copy JSON value at cursor path"},
+		{"yi", "Copy individual item (header or line)"},
 		{"yg + key", "Generate code (see below)"},
 	})
 
@@ -259,11 +272,14 @@ func contextHelp(ctx string) string {
 		sb.WriteString("\n" + section.Render("Assertions") + "\n")
 		sb.WriteString("  Add " + key.Render("# @assert status == 200") + " to validate responses.\n")
 		sb.WriteString("  Run headless: " + key.Render("restless run api.http --env dev") + "\n")
-		sb.WriteString("\n" + section.Render("Yank") + "\n")
+		sb.WriteString("\n" + section.Render("Yank & Selection") + "\n")
 		writeKeys(&sb, key, [][2]string{
 			{"yb/yh/ya", "Copy body / headers / full request"},
 			{"yc", "Copy as curl command"},
+			{"yl/yp/yv/yi", "Copy line / JSON path / value / item"},
 			{"yg + key", "Generate code (Python, JS, Go, etc.)"},
+			{"v", "Visual selection mode (j/k to extend, y to copy)"},
+			{"gp", "Jump to JSON path"},
 		})
 
 	case "detail-response":
@@ -288,12 +304,18 @@ func contextHelp(ctx string) string {
 			{"f", "Search in response body"},
 			{"n/N", "Next/previous search match"},
 		})
-		sb.WriteString("\n" + section.Render("Copy") + "\n")
+		sb.WriteString("\n" + section.Render("Copy & Selection") + "\n")
 		writeKeys(&sb, key, [][2]string{
 			{"yb", "Copy response body"},
 			{"yh", "Copy response headers"},
 			{"ya", "Copy full response (status + headers + body)"},
+			{"yl", "Copy current line"},
+			{"yp", "Copy JSON path at cursor"},
+			{"yv", "Copy JSON value at cursor path"},
+			{"yi", "Copy individual header or line"},
 			{"yg + key", "Generate code from the request"},
+			{"v", "Visual selection mode (j/k to extend, y to copy)"},
+			{"gp", "Jump to JSON path"},
 		})
 		sb.WriteString("\n" + section.Render("History") + "\n")
 		writeKeys(&sb, key, [][2]string{

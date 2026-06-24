@@ -1,7 +1,0 @@
-go build ./... — OK
-go vet ./... — OK
-
-Dependencies installed:
-module github.com/shahadulhaider/restless
-
-go 1.25.6

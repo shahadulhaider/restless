@@ -19,6 +19,10 @@ go.work.sum
 # Local data
 .restless/
 
+# Agent / AI tooling state
+.sisyphus/
+.agents/
+
 # IDE
 .idea/
 .vscode/

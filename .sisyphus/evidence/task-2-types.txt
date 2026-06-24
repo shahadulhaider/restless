@@ -1,2 +1,0 @@
-go build ./internal/model/... — OK
-go vet ./internal/model/... — OK

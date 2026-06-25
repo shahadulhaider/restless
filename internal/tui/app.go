@@ -354,47 +354,49 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case tea.KeyPressMsg:
-		if m.showHelp {
-			if msg.String() == "?" || msg.String() == "esc" || msg.String() == "f1" {
-				m.showHelp = false
-				return m, nil
+		if m.anyOverlayActive() {
+			if m.showHelp {
+				if msg.String() == "?" || msg.String() == "esc" || msg.String() == "f1" {
+					m.showHelp = false
+					return m, nil
+				}
+				var cmd tea.Cmd
+				m.help, cmd = m.help.Update(msg)
+				return m, cmd
 			}
-			var cmd tea.Cmd
-			m.help, cmd = m.help.Update(msg)
-			return m, cmd
-		}
-		if m.showEditor {
-			var cmd tea.Cmd
-			m.editor, cmd = m.editor.Update(msg)
-			return m, cmd
-		}
-		if m.showConfirm {
-			var cmd tea.Cmd
-			m.confirm, cmd = m.confirm.Update(msg)
-			return m, cmd
-		}
-		if m.showPrompt {
-			var cmd tea.Cmd
-			m.prompt, cmd = m.prompt.Update(msg)
-			return m, cmd
-		}
-		if m.showSearch {
-			if msg.String() == "esc" {
-				m.showSearch = false
-				return m, nil
+			if m.showEditor {
+				var cmd tea.Cmd
+				m.editor, cmd = m.editor.Update(msg)
+				return m, cmd
 			}
-			var cmd tea.Cmd
-			m.search, cmd = m.search.Update(msg)
-			return m, cmd
-		}
-		if m.showEnvSwitch {
-			if msg.String() == "esc" {
-				m.showEnvSwitch = false
-				return m, nil
+			if m.showConfirm {
+				var cmd tea.Cmd
+				m.confirm, cmd = m.confirm.Update(msg)
+				return m, cmd
 			}
-			var cmd tea.Cmd
-			m.envSwitch, cmd = m.envSwitch.Update(msg)
-			return m, cmd
+			if m.showPrompt {
+				var cmd tea.Cmd
+				m.prompt, cmd = m.prompt.Update(msg)
+				return m, cmd
+			}
+			if m.showSearch {
+				if msg.String() == "esc" {
+					m.showSearch = false
+					return m, nil
+				}
+				var cmd tea.Cmd
+				m.search, cmd = m.search.Update(msg)
+				return m, cmd
+			}
+			if m.showEnvSwitch {
+				if msg.String() == "esc" {
+					m.showEnvSwitch = false
+					return m, nil
+				}
+				var cmd tea.Cmd
+				m.envSwitch, cmd = m.envSwitch.Update(msg)
+				return m, cmd
+			}
 		}
 
 		// Route keys to the detail pane while it captures inline input, so
@@ -676,6 +678,14 @@ func (m App) currentDir() string {
 		return filepath.Dir(item.Path)
 	}
 	return m.rootDir
+}
+
+// anyOverlayActive reports whether a modal overlay is capturing input. It is the
+// single source of truth for the overlay flags so global key handling stays in
+// sync as overlays are added or removed.
+func (m App) anyOverlayActive() bool {
+	return m.showHelp || m.showEditor || m.showConfirm ||
+		m.showPrompt || m.showSearch || m.showEnvSwitch
 }
 
 // helpContext returns the context string for F1 context-sensitive help.

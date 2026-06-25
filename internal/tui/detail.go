@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image/color"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
@@ -1201,14 +1202,13 @@ func (m DetailModel) buildResponseAccordion() accordionResult {
 	}
 
 	// Section 3: Timing
-	totalMs := resp.Timing.Total.Milliseconds()
 	timingContent := timingView(resp)
 	timingSummary := m.timingPreviewStr()
 
 	sections := []accordionSection{
 		{key: "1", label: "Body", summary: bodySummary, preview: bodyPreview, content: bodyContent, expanded: m.respFolds[0]},
 		{key: "2", label: fmt.Sprintf("Headers (%d)", len(resp.Headers)), summary: hdrSummary, preview: hdrPreview, content: hdrContent, expanded: m.respFolds[1]},
-		{key: "3", label: fmt.Sprintf("Timing ── %dms", totalMs), summary: timingSummary, content: timingContent, expanded: m.respFolds[2]},
+		{key: "3", label: fmt.Sprintf("Timing ── %s", formatDuration(resp.Timing.Total)), summary: timingSummary, content: timingContent, expanded: m.respFolds[2]},
 	}
 
 	// Section 4: Assertions (only if assertions exist)
@@ -1420,12 +1420,7 @@ func (m DetailModel) stickyStatus() string {
 
 	timing := ""
 	if resp.Timing.Total > 0 {
-		ms := resp.Timing.Total.Milliseconds()
-		if ms < 1000 {
-			timing = fmt.Sprintf("%dms", ms)
-		} else {
-			timing = fmt.Sprintf("%.1fs", float64(ms)/1000)
-		}
+		timing = formatDuration(resp.Timing.Total)
 	}
 
 	sep := dimStyle.Render(" ── ")
@@ -1560,29 +1555,44 @@ func indentXML(s string) string {
 	return sb.String()
 }
 
+func formatDuration(d time.Duration) string {
+	switch {
+	case d <= 0:
+		return "0ms"
+	case d < time.Microsecond:
+		return fmt.Sprintf("%dns", d.Nanoseconds())
+	case d < time.Millisecond:
+		return fmt.Sprintf("%dµs", d.Microseconds())
+	case d < time.Second:
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	default:
+		return fmt.Sprintf("%.1fs", d.Seconds())
+	}
+}
+
 func timingView(resp *model.Response) string {
 	t := resp.Timing
-	total := t.Total.Milliseconds()
-	if total == 0 {
+	if t.Total <= 0 {
 		return dimStyle.Render("  (no timing data)")
 	}
+	totalNs := t.Total.Nanoseconds()
 	barWidth := 24
 	phases := []struct {
 		name string
-		ms   int64
+		d    time.Duration
 		clr  string
 	}{
-		{"DNS    ", t.DNS.Milliseconds(), "#89B4FA"},
-		{"Connect", t.Connect.Milliseconds(), "#A6E3A1"},
-		{"TLS    ", t.TLS.Milliseconds(), "#F9E2AF"},
-		{"TTFB   ", t.TTFB.Milliseconds(), "#FAB387"},
-		{"Body   ", t.BodyRead.Milliseconds(), "#CBA6F7"},
-		{"Total  ", total, "#CDD6F4"},
+		{"DNS    ", t.DNS, "#89B4FA"},
+		{"Connect", t.Connect, "#A6E3A1"},
+		{"TLS    ", t.TLS, "#F9E2AF"},
+		{"TTFB   ", t.TTFB, "#FAB387"},
+		{"Body   ", t.BodyRead, "#CBA6F7"},
+		{"Total  ", t.Total, "#CDD6F4"},
 	}
 	var sb strings.Builder
 	for _, p := range phases {
-		filled := int(int64(barWidth) * p.ms / total)
-		if p.ms > 0 && filled == 0 {
+		filled := int(int64(barWidth) * p.d.Nanoseconds() / totalNs)
+		if p.d > 0 && filled == 0 {
 			filled = 1
 		}
 		empty := barWidth - filled
@@ -1591,7 +1601,7 @@ func timingView(resp *model.Response) string {
 		}
 		bar := lipgloss.NewStyle().Foreground(lipgloss.Color(p.clr)).Render(strings.Repeat("█", filled))
 		bar += dimStyle.Render(strings.Repeat("░", empty))
-		sb.WriteString(fmt.Sprintf("  %s  %s  %dms\n", dimStyle.Render(p.name), bar, p.ms))
+		sb.WriteString(fmt.Sprintf("  %s  %s  %s\n", dimStyle.Render(p.name), bar, formatDuration(p.d)))
 	}
 	return sb.String()
 }

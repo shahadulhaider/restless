@@ -397,6 +397,70 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
+		// Route keys to the detail pane while it captures inline input, so
+		// global shortcuts don't fire mid-input.
+		if m.focus == PaneDetail && m.detail.InputActive() {
+			var cmd tea.Cmd
+			m.detail, cmd = m.detail.Update(msg)
+			return m, cmd
+		}
+
+		// Mutation shortcuts are browser-only so they can't fire from the detail pane.
+		if m.focus == PaneBrowser {
+			switch msg.String() {
+			case "n":
+				m.editor = NewEditorModel()
+				m.editor.SetAvailableVars(m.collectAvailableVars())
+				m.editingReq = nil
+				m.showEditor = true
+				return m, nil
+			case "N":
+				dir := m.currentDir()
+				relDir, _ := filepath.Rel(m.rootDir, dir)
+				m.prompt = NewPromptModel("New file name (without .http)", promptCreateFile{dir: relDir})
+				m.showPrompt = true
+				return m, nil
+			case "D":
+				if sel := m.browser.selected; sel != nil {
+					m.confirm = NewConfirmModel("Delete this request?", confirmDeleteRequest{req: *sel})
+					m.showConfirm = true
+				}
+				return m, nil
+			case "Y":
+				if sel := m.browser.selected; sel != nil {
+					targetFile := sel.SourceFile
+					if err := writer.DuplicateRequest(*sel, targetFile); err != nil {
+						m.statusText = "Error: " + err.Error()
+					}
+					return m, func() tea.Msg { return collectionReloadMsg{} }
+				}
+				return m, nil
+			case "F":
+				dir := m.currentDir()
+				parent, _ := filepath.Rel(m.rootDir, dir)
+				if parent == "." {
+					parent = ""
+				}
+				m.prompt = NewPromptModel("New folder name", promptCreateDir{parent: parent})
+				m.showPrompt = true
+				return m, nil
+			case "R":
+				if item := m.browser.CurrentItem(); item != nil {
+					rel, _ := filepath.Rel(m.rootDir, item.Path)
+					m.prompt = NewPromptModel("Rename to", promptRename{relPath: rel})
+					m.showPrompt = true
+				}
+				return m, nil
+			case "M":
+				if item := m.browser.CurrentItem(); item != nil {
+					rel, _ := filepath.Rel(m.rootDir, item.Path)
+					m.prompt = NewPromptModel("Move to (relative path)", promptMove{relPath: rel})
+					m.showPrompt = true
+				}
+				return m, nil
+			}
+		}
+
 		switch msg.String() {
 		case "?":
 			m.help = NewHelpModel(helpFull, "")
@@ -437,13 +501,6 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Environment switch (was: e)
 			m.showEnvSwitch = true
 			return m, nil
-		case "n":
-			// Create new request
-			m.editor = NewEditorModel()
-			m.editor.SetAvailableVars(m.collectAvailableVars())
-			m.editingReq = nil
-			m.showEditor = true
-			return m, nil
 		case "e":
 			// Edit with $EDITOR — fallback to internal editor if $EDITOR is not set
 			if sel := m.browser.selected; sel != nil && sel.SourceFile != "" {
@@ -472,57 +529,6 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.editor.SetAvailableVars(m.collectAvailableVars())
 				m.editingReq = sel
 				m.showEditor = true
-			}
-			return m, nil
-		case "D":
-			// Delete selected request (with confirmation)
-			if sel := m.browser.selected; sel != nil {
-				m.confirm = NewConfirmModel("Delete this request?", confirmDeleteRequest{req: *sel})
-				m.showConfirm = true
-			}
-			return m, nil
-		case "Y":
-			// Duplicate selected request
-			if sel := m.browser.selected; sel != nil {
-				targetFile := sel.SourceFile
-				if err := writer.DuplicateRequest(*sel, targetFile); err != nil {
-					m.statusText = "Error: " + err.Error()
-				}
-				return m, func() tea.Msg { return collectionReloadMsg{} }
-			}
-			return m, nil
-
-		case "N":
-			// Create new .http file in current directory
-			dir := m.currentDir()
-			relDir, _ := filepath.Rel(m.rootDir, dir)
-			m.prompt = NewPromptModel("New file name (without .http)", promptCreateFile{dir: relDir})
-			m.showPrompt = true
-			return m, nil
-		case "F":
-			// Create new folder
-			dir := m.currentDir()
-			parent, _ := filepath.Rel(m.rootDir, dir)
-			if parent == "." {
-				parent = ""
-			}
-			m.prompt = NewPromptModel("New folder name", promptCreateDir{parent: parent})
-			m.showPrompt = true
-			return m, nil
-		case "R":
-			// Rename selected item
-			if item := m.browser.CurrentItem(); item != nil {
-				rel, _ := filepath.Rel(m.rootDir, item.Path)
-				m.prompt = NewPromptModel("Rename to", promptRename{relPath: rel})
-				m.showPrompt = true
-			}
-			return m, nil
-		case "M":
-			// Move selected item
-			if item := m.browser.CurrentItem(); item != nil {
-				rel, _ := filepath.Rel(m.rootDir, item.Path)
-				m.prompt = NewPromptModel("Move to (relative path)", promptMove{relPath: rel})
-				m.showPrompt = true
 			}
 			return m, nil
 		}

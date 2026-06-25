@@ -163,6 +163,14 @@ func (m *DetailModel) folds() *[4]bool {
 	return &m.respFolds
 }
 
+// InputActive reports whether the detail pane is capturing keystrokes for an
+// inline input, overlay, or multi-key prefix.
+func (m DetailModel) InputActive() bool {
+	return m.searching || m.jumpingPath || m.selecting ||
+		m.showHistory || m.showDiff ||
+		m.pendingG || m.pendingZ || m.pendingY || m.pendingYG
+}
+
 func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:

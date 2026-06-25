@@ -73,6 +73,20 @@ const varInsomniaExport = `{
   ]
 }`
 
+const bodyVarInsomniaExport = `{
+  "__export_type": "insomnia",
+  "resources": [
+    {"_type":"workspace","_id":"wrk_1","name":"Body Var API","parentId":""},
+    {
+      "_type":"request","_id":"req_1","parentId":"wrk_1",
+      "name":"Echo Token","method":"POST","url":"https://api.example.com/echo",
+      "headers":[{"name":"Content-Type","value":"application/json","disabled":false}],
+      "body":{"mimeType":"application/json","text":"{\"hello\":\"{{ _.token }}\"}"},
+      "authentication":{}
+    }
+  ]
+}`
+
 func TestImportInsomnia(t *testing.T) {
 	col := filepath.Join(t.TempDir(), "export.json")
 	require.NoError(t, os.WriteFile(col, []byte(simpleInsomniaExport), 0644))
@@ -129,6 +143,20 @@ func TestImportInsomniaAuth(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(out, "auth_api.http"))
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "Authorization: Bearer my-secret-token")
+}
+
+func TestImportInsomniaBodyVarConversion(t *testing.T) {
+	col := filepath.Join(t.TempDir(), "export.json")
+	require.NoError(t, os.WriteFile(col, []byte(bodyVarInsomniaExport), 0644))
+
+	out := t.TempDir()
+	require.NoError(t, ImportInsomnia(col, ImportOptions{OutputDir: out}))
+
+	content, err := os.ReadFile(filepath.Join(out, "body_var_api.http"))
+	require.NoError(t, err)
+	s := string(content)
+	assert.Contains(t, s, `{{token}}`)
+	assert.NotContains(t, s, `{{ _.token }}`)
 }
 
 func TestImportInsomniaVarConversion(t *testing.T) {

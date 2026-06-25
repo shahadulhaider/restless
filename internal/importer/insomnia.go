@@ -11,20 +11,20 @@ import (
 
 // Insomnia v4 export structures
 type insomniaExport struct {
-	ExportType string              `json:"__export_type"`
-	Resources  []insomniaResource  `json:"resources"`
+	ExportType string             `json:"__export_type"`
+	Resources  []insomniaResource `json:"resources"`
 }
 
 type insomniaResource struct {
-	Type     string             `json:"_type"`
-	ID       string             `json:"_id"`
-	ParentID string             `json:"parentId"`
-	Name     string             `json:"name"`
-	Method   string             `json:"method"`
-	URL      string             `json:"url"`
-	Headers  []insomniaHeader   `json:"headers"`
-	Body     insomniaBody       `json:"body"`
-	Auth     insomniaAuth       `json:"authentication"`
+	Type     string           `json:"_type"`
+	ID       string           `json:"_id"`
+	ParentID string           `json:"parentId"`
+	Name     string           `json:"name"`
+	Method   string           `json:"method"`
+	URL      string           `json:"url"`
+	Headers  []insomniaHeader `json:"headers"`
+	Body     insomniaBody     `json:"body"`
+	Auth     insomniaAuth     `json:"authentication"`
 }
 
 type insomniaHeader struct {
@@ -232,9 +232,10 @@ func convertInsomniaRequest(r *insomniaResource) string {
 	}
 
 	if r.Body.Text != "" {
+		body := convertInsomniaVars(r.Body.Text)
 		sb.WriteString("\n")
-		sb.WriteString(r.Body.Text)
-		if !strings.HasSuffix(r.Body.Text, "\n") {
+		sb.WriteString(body)
+		if !strings.HasSuffix(body, "\n") {
 			sb.WriteString("\n")
 		}
 	}

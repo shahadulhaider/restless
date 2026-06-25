@@ -158,6 +158,18 @@ func TestVersionCommand(t *testing.T) {
 	assert.Equal(t, "restless "+version, strings.TrimSpace(out))
 }
 
+func TestVersionRejectsExtraArgs(t *testing.T) {
+	c := rootCmd()
+	var buf bytes.Buffer
+	c.SetOut(&buf)
+	c.SetErr(&buf)
+	c.SetArgs([]string{"version", "foo", "bar"})
+
+	err := c.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown command")
+}
+
 func TestRootHelpListsSubcommands(t *testing.T) {
 	c := rootCmd()
 	var buf bytes.Buffer

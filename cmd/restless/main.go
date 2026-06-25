@@ -261,6 +261,7 @@ func versionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "Print version",
+		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
 			fmt.Println("restless", version)
 		},

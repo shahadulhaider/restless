@@ -1,6 +1,8 @@
 package importer
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -95,6 +97,13 @@ const envDevBru = `vars {
 const envProdBru = `vars {
   baseUrl: https://prod.example.com
   apiKey: prod-key-456
+}
+`
+
+const brokenBru = `meta {
+  name: Broken Request
+  type: http
+  seq: 1
 }
 `
 
@@ -197,6 +206,37 @@ func TestImportBrunoBody(t *testing.T) {
 	require.Len(t, reqs, 1)
 	assert.Equal(t, "POST", reqs[0].Method)
 	assert.NotEmpty(t, reqs[0].Body)
+}
+
+func TestImportBrunoInvalidFileWarns(t *testing.T) {
+	src := t.TempDir()
+	writeBruFile(t, filepath.Join(src, "health.bru"), simpleGetBru)
+	writeBruFile(t, filepath.Join(src, "broken.bru"), brokenBru)
+
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+
+	out := t.TempDir()
+	importErr := ImportBruno(src, ImportOptions{OutputDir: out})
+
+	require.NoError(t, w.Close())
+	os.Stderr = oldStderr
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	stderr := buf.String()
+
+	require.NoError(t, importErr)
+	assert.Contains(t, stderr, "broken.bru")
+
+	files, err := filepath.Glob(filepath.Join(out, "*.http"))
+	require.NoError(t, err)
+	require.Len(t, files, 1)
+	content, err := os.ReadFile(files[0])
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "# @name Health Check")
 }
 
 func TestImportBrunoEnvironments(t *testing.T) {

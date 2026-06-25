@@ -76,7 +76,12 @@ func walkBrunoDir(srcDir, dstDir, rootDir string) error {
 	first := true
 	for _, bruPath := range bruFiles {
 		req, err := parseBruFile(bruPath)
-		if err != nil || req == nil {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "restless: warning: skipping invalid Bruno file %s: %v\n", bruPath, err)
+			continue
+		}
+		if req == nil {
+			fmt.Fprintf(os.Stderr, "restless: warning: skipping invalid Bruno file %s: no recognized request block\n", bruPath)
 			continue
 		}
 		if !first {

@@ -95,6 +95,32 @@ func TestRunWithDataCSV(t *testing.T) {
 	assert.Contains(t, out.String(), "Iteration 3/3")
 }
 
+func TestRunMissingBodyFile(t *testing.T) {
+	serverHit := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serverHit = true
+		w.WriteHeader(200)
+		w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	httpFile := filepath.Join(dir, "test.http")
+	content := "POST " + srv.URL + "/upload\nContent-Type: application/json\n\n< ./does-not-exist.json\n"
+	require.NoError(t, os.WriteFile(httpFile, []byte(content), 0644))
+
+	var out, errOut bytes.Buffer
+	result, err := Run(RunConfig{
+		FilePath:  httpFile,
+		Output:    &out,
+		ErrOutput: &errOut,
+	})
+	require.NoError(t, err)
+	assert.True(t, result.AnyFailed)
+	assert.Contains(t, errOut.String(), "cannot read body file")
+	assert.False(t, serverHit, "request must not be sent when the body file is missing")
+}
+
 func TestRunFailFast(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)

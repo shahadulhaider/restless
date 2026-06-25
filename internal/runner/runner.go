@@ -140,7 +140,13 @@ func Run(cfg RunConfig) (RunResult, error) {
 			resolved, _ := parser.ResolveRequest(&req, iterVars, chainCtx)
 			loaded, loadErr := parser.LoadFileBody(resolved, rootDir)
 			if loadErr != nil {
-				loaded = resolved
+				fmt.Fprintf(cfg.ErrOutput, "\033[31m✗\033[0m %s %s: %v\n", resolved.Method, resolved.URL, loadErr)
+				result.AnyFailed = true
+				iterPassed = false
+				if cfg.FailFast {
+					return result, nil
+				}
+				continue
 			}
 
 			// Run pre-request script

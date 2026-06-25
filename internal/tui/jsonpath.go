@@ -40,7 +40,7 @@ func jsonLineToPath(prettyJSON string, lineNum int) string {
 				// "key": { or "key": [
 				key := extractJSONKey(line)
 				if key != "" {
-					for len(path) > depth {
+					for len(path) > depth-1 {
 						path = path[:len(path)-1]
 					}
 					path = append(path, key)
@@ -64,7 +64,7 @@ func jsonLineToPath(prettyJSON string, lineNum int) string {
 			// "key": value
 			key := extractJSONKey(line)
 			if key != "" {
-				for len(path) > depth {
+				for len(path) > depth-1 {
 					path = path[:len(path)-1]
 				}
 				path = append(path, key)

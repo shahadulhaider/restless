@@ -94,3 +94,24 @@ func TestHasResponse(t *testing.T) {
 	ctx.StoreResponse("login", loginResponse())
 	assert.True(t, ctx.HasResponse("login"))
 }
+
+func TestResolveStatusDurationSize(t *testing.T) {
+	ctx := NewChainContext()
+	ctx.StoreResponse("login", &model.Response{
+		StatusCode: 201,
+		Body:       []byte(`{"ok":true}`),
+		Timing:     model.ResponseTiming{Total: 150 * time.Millisecond},
+	})
+
+	status, err := ctx.Resolve("login.response.status")
+	require.NoError(t, err)
+	assert.Equal(t, "201", status)
+
+	duration, err := ctx.Resolve("login.response.duration")
+	require.NoError(t, err)
+	assert.Equal(t, "150", duration)
+
+	size, err := ctx.Resolve("login.response.size")
+	require.NoError(t, err)
+	assert.Equal(t, "11", size)
+}

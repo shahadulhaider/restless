@@ -2,6 +2,7 @@ package chain
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/shahadulhaider/restless/internal/model"
@@ -22,8 +23,8 @@ func (ctx *ChainContext) StoreResponse(name string, resp *model.Response) {
 
 func (ctx *ChainContext) Resolve(varRef string) (string, error) {
 	parts := strings.SplitN(varRef, ".", 4)
-	if len(parts) < 4 {
-		return "", fmt.Errorf("invalid chain variable %q: expected requestName.response.body|headers.path", varRef)
+	if len(parts) < 3 {
+		return "", fmt.Errorf("invalid chain variable %q: expected requestName.response.field", varRef)
 	}
 
 	name := parts[0]
@@ -34,6 +35,19 @@ func (ctx *ChainContext) Resolve(varRef string) (string, error) {
 
 	if parts[1] != "response" {
 		return "", fmt.Errorf("invalid chain variable %q: expected 'response' as second segment", varRef)
+	}
+
+	switch parts[2] {
+	case "status":
+		return strconv.Itoa(resp.StatusCode), nil
+	case "duration":
+		return strconv.FormatInt(resp.Timing.Total.Milliseconds(), 10), nil
+	case "size":
+		return strconv.Itoa(len(resp.Body)), nil
+	}
+
+	if len(parts) < 4 {
+		return "", fmt.Errorf("invalid chain variable %q: expected requestName.response.body|headers.path", varRef)
 	}
 
 	switch parts[2] {
@@ -54,7 +68,7 @@ func (ctx *ChainContext) Resolve(varRef string) (string, error) {
 		return "", fmt.Errorf("header %q not found in response from %q", headerName, name)
 
 	default:
-		return "", fmt.Errorf("invalid chain variable %q: expected 'body' or 'headers'", varRef)
+		return "", fmt.Errorf("invalid chain variable %q: expected 'body', 'headers', 'status', 'duration', or 'size'", varRef)
 	}
 }
 

@@ -3,6 +3,7 @@ package parser
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/shahadulhaider/restless/internal/model"
@@ -55,6 +56,14 @@ func resolveString(s string, vars map[string]string, chainCtx *ChainContext) str
 			resp, ok := chainCtx.Responses[name]
 			if !ok {
 				return match
+			}
+			switch parts[2] {
+			case "status":
+				return strconv.Itoa(resp.StatusCode)
+			case "duration":
+				return strconv.FormatInt(resp.Timing.Total.Milliseconds(), 10)
+			case "size":
+				return strconv.Itoa(len(resp.Body))
 			}
 			if parts[2] == "body" && len(parts) == 4 {
 				result := gjson.GetBytes(resp.Body, parts[3])

@@ -123,19 +123,19 @@ func Run(cfg RunConfig) (RunResult, error) {
 			fmt.Fprintf(cfg.Output, "\n── Iteration %d/%d%s ──\n", iterIdx+1, len(dataRows), preview)
 		}
 
-		// Merge variables: base + data row
+		// Precedence (low to high): file vars, env vars, --data row. A --data
+		// column is most specific and overrides an env var of the same name.
 		iterVars := make(map[string]string)
 		for k, v := range fileVars {
+			iterVars[k] = v
+		}
+		for k, v := range baseVars {
 			iterVars[k] = v
 		}
 		if dataRow != nil {
 			for k, v := range dataRow {
 				iterVars[k] = v
 			}
-		}
-		// Env vars override everything
-		for k, v := range baseVars {
-			iterVars[k] = v
 		}
 
 		iterPassed := true

@@ -215,3 +215,33 @@ func TestRunDataJSONIterationsField(t *testing.T) {
 	assert.Equal(t, 3, report.Iterations[2].Index)
 	assert.Equal(t, "Charlie", report.Iterations[2].DataVars["name"])
 }
+
+func TestRunDataOverridesEnvVar(t *testing.T) {
+	var gotToken string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotToken = r.URL.Query().Get("token")
+		w.WriteHeader(200)
+		w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	httpFile := filepath.Join(dir, "test.http")
+	content := "GET " + srv.URL + "/get?token={{token}}\n"
+	require.NoError(t, os.WriteFile(httpFile, []byte(content), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "restless.env.json"),
+		[]byte(`{"dev":{"token":"env-token"}}`), 0644))
+	csvFile := filepath.Join(dir, "data.csv")
+	require.NoError(t, os.WriteFile(csvFile, []byte("token\ndata-token\n"), 0644))
+
+	var out, errOut bytes.Buffer
+	_, err := Run(RunConfig{
+		FilePath:  httpFile,
+		EnvName:   "dev",
+		DataFile:  csvFile,
+		Output:    &out,
+		ErrOutput: &errOut,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "data-token", gotToken, "--data column must override env var of the same name")
+}

@@ -39,29 +39,35 @@ func ImportPostman(collectionPath string, opts ImportOptions) error {
 		return err
 	}
 
-	return writeItems(col.Items, outDir, sanitizeName(col.Info.Name))
+	return writeItems(col.Items, outDir, sanitizeName(col.Info.Name), 0)
 }
 
-func writeItems(items []*postman.Items, dir string, defaultFileName string) error {
-	var rootRequests []*postman.Items
+// maxImportDepth bounds folder recursion against malformed/pathological collections.
+const maxImportDepth = 100
+
+func writeItems(items []*postman.Items, dir string, defaultFileName string, depth int) error {
+	if depth > maxImportDepth {
+		return fmt.Errorf("postman import: folder nesting exceeds maximum depth %d", maxImportDepth)
+	}
+
+	var leafRequests []*postman.Items
 	for _, item := range items {
 		if item.IsGroup() {
 			subDir := filepath.Join(dir, sanitizeName(item.Name))
 			if err := os.MkdirAll(subDir, 0755); err != nil {
 				return err
 			}
-			fileName := sanitizeName(item.Name) + ".http"
-			if err := writeGroupToFile(item.Items, filepath.Join(subDir, fileName)); err != nil {
+			if err := writeItems(item.Items, subDir, sanitizeName(item.Name), depth+1); err != nil {
 				return err
 			}
-		} else {
-			rootRequests = append(rootRequests, item)
+		} else if item.Request != nil {
+			leafRequests = append(leafRequests, item)
 		}
 	}
 
-	if len(rootRequests) > 0 {
+	if len(leafRequests) > 0 {
 		fileName := defaultFileName + ".http"
-		if err := writeGroupToFile(rootRequests, filepath.Join(dir, fileName)); err != nil {
+		if err := writeGroupToFile(leafRequests, filepath.Join(dir, fileName)); err != nil {
 			return err
 		}
 	}

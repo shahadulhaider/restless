@@ -30,6 +30,18 @@ const folderCollection = `{
   ]
 }`
 
+const nestedCollection = `{
+  "info": { "name": "Nested API", "_postman_id": "nst", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json" },
+  "item": [
+    { "name": "Parent", "item": [
+      { "name": "DirectReq", "request": { "method": "GET", "url": { "raw": "https://api.example.com/direct" }, "header": [] } },
+      { "name": "Child", "item": [
+        { "name": "DeepReq", "request": { "method": "POST", "url": { "raw": "https://api.example.com/deep" }, "header": [] } }
+      ]}
+    ]}
+  ]
+}`
+
 func TestImportSimpleCollection(t *testing.T) {
 	col := t.TempDir() + "/simple.json"
 	require.NoError(t, os.WriteFile(col, []byte(simpleCollection), 0644))
@@ -67,6 +79,26 @@ func TestImportWithFolders(t *testing.T) {
 	usersContent, _ := os.ReadFile(usersFile)
 	assert.Contains(t, string(usersContent), "GET https://api.example.com/users")
 	assert.Contains(t, string(usersContent), "GET https://api.example.com/users/1")
+}
+
+func TestImportWithNestedFolders(t *testing.T) {
+	col := t.TempDir() + "/nested.json"
+	require.NoError(t, os.WriteFile(col, []byte(nestedCollection), 0644))
+
+	out := t.TempDir()
+	err := ImportPostman(col, ImportOptions{OutputDir: out})
+	require.NoError(t, err)
+
+	parentFile := filepath.Join(out, "parent", "parent.http")
+	childFile := filepath.Join(out, "parent", "child", "child.http")
+	require.FileExists(t, parentFile)
+	require.FileExists(t, childFile)
+
+	parentContent, _ := os.ReadFile(parentFile)
+	assert.Contains(t, string(parentContent), "GET https://api.example.com/direct")
+
+	childContent, _ := os.ReadFile(childFile)
+	assert.Contains(t, string(childContent), "POST https://api.example.com/deep")
 }
 
 func TestImportRequestName(t *testing.T) {

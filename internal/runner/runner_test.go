@@ -280,3 +280,36 @@ func TestRunCookiePersistsAcrossIterations(t *testing.T) {
 	assert.Equal(t, "", receivedSess[0], "iteration 1 sends no cookie yet")
 	assert.Equal(t, "v1", receivedSess[1], "cookie from iteration 1 must persist into iteration 2")
 }
+
+func TestRunDataNestedDotPath(t *testing.T) {
+	var gotRole, gotTag, gotWhole string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotRole = r.URL.Query().Get("role")
+		gotTag = r.URL.Query().Get("tag")
+		gotWhole = r.URL.Query().Get("whole")
+		w.WriteHeader(200)
+		w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	httpFile := filepath.Join(dir, "test.http")
+	content := "GET " + srv.URL + "/get?role={{meta.role}}&tag={{meta.tags.0}}&whole={{name}}\n"
+	require.NoError(t, os.WriteFile(httpFile, []byte(content), 0644))
+
+	jsonFile := filepath.Join(dir, "data.json")
+	data := `[{"name": "alice", "meta": {"role": "admin", "tags": ["alpha", "beta"]}}]`
+	require.NoError(t, os.WriteFile(jsonFile, []byte(data), 0644))
+
+	var out, errOut bytes.Buffer
+	_, err := Run(RunConfig{
+		FilePath:  httpFile,
+		DataFile:  jsonFile,
+		Output:    &out,
+		ErrOutput: &errOut,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "admin", gotRole, "{{meta.role}} must resolve nested JSON object field")
+	assert.Equal(t, "alpha", gotTag, "{{meta.tags.0}} must resolve nested JSON array index")
+	assert.Equal(t, "alice", gotWhole, "scalar columns must still resolve")
+}

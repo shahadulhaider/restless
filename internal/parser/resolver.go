@@ -78,6 +78,16 @@ func resolveString(s string, vars map[string]string, chainCtx *ChainContext) str
 			return val
 		}
 
+		// Dot-path into a JSON-valued variable, e.g. a --data column holding an
+		// object/array exposed as {{meta.role}} or {{tags.0}}.
+		if dot := strings.IndexByte(inner, '.'); dot > 0 {
+			if raw, ok := vars[inner[:dot]]; ok {
+				if res := gjson.Get(raw, inner[dot+1:]); res.Exists() {
+					return res.String()
+				}
+			}
+		}
+
 		return match
 	})
 }

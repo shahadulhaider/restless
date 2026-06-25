@@ -35,7 +35,7 @@ func ImportOpenAPI(specPath string, opts ImportOptions) error {
 	baseURL := doc.baseURL()
 
 	// If base URL is empty or just "/" (common with FastAPI), use {{baseUrl}} variable
-	// and generate an http-client.env.json with the original server URL
+	// and generate a restless.env.json with the original server URL
 	if baseURL == "" || baseURL == "/" {
 		baseURL = "{{baseUrl}}"
 		writeOpenAPIEnvFile(outDir, doc)
@@ -290,11 +290,11 @@ func (d *openAPIDoc) baseURL() string {
 }
 
 type openAPIOperation struct {
-	OperationID string               `json:"operationId" yaml:"operationId"`
-	Summary     string               `json:"summary" yaml:"summary"`
-	Tags        []string             `json:"tags" yaml:"tags"`
-	Parameters  []openAPIParameter   `json:"parameters" yaml:"parameters"`
-	RequestBody *openAPIRequestBody  `json:"requestBody" yaml:"requestBody"`
+	OperationID string              `json:"operationId" yaml:"operationId"`
+	Summary     string              `json:"summary" yaml:"summary"`
+	Tags        []string            `json:"tags" yaml:"tags"`
+	Parameters  []openAPIParameter  `json:"parameters" yaml:"parameters"`
+	RequestBody *openAPIRequestBody `json:"requestBody" yaml:"requestBody"`
 }
 
 type openAPIParameter struct {
@@ -317,7 +317,7 @@ type openAPISchema struct {
 	Example    interface{}               `json:"example" yaml:"example"`
 }
 
-// writeOpenAPIEnvFile generates http-client.env.json with baseUrl from the spec's servers.
+// writeOpenAPIEnvFile generates restless.env.json with baseUrl from the spec's servers.
 func writeOpenAPIEnvFile(outDir string, doc *openAPIDoc) {
 	serverURL := "http://localhost:8000"
 	if len(doc.Servers) > 0 && doc.Servers[0].URL != "" && doc.Servers[0].URL != "/" {

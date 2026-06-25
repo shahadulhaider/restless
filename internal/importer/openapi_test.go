@@ -93,6 +93,21 @@ const openAPIWithQueryParams = `{
   }
 }`
 
+const relativeServerOpenAPI = `{
+  "openapi": "3.0.0",
+  "info": {"title": "Ping API", "version": "1.0.0"},
+  "servers": [{"url": "/"}],
+  "paths": {
+    "/ping": {
+      "get": {
+        "operationId": "ping",
+        "tags": ["ping"],
+        "responses": {}
+      }
+    }
+  }
+}`
+
 const openAPIYAML = `openapi: "3.0.0"
 info:
   title: YAML API
@@ -182,6 +197,17 @@ func TestImportOpenAPIYAML(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(out, "items.http"))
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "GET https://api.yaml.example.com/items")
+}
+
+func TestImportOpenAPIEnvFileName(t *testing.T) {
+	spec := filepath.Join(t.TempDir(), "openapi.json")
+	require.NoError(t, os.WriteFile(spec, []byte(relativeServerOpenAPI), 0644))
+
+	out := t.TempDir()
+	require.NoError(t, ImportOpenAPI(spec, ImportOptions{OutputDir: out}))
+
+	require.FileExists(t, filepath.Join(out, "restless.env.json"))
+	assert.NoFileExists(t, filepath.Join(out, "http-client.env.json"))
 }
 
 func TestImportOpenAPIInvalidDoc(t *testing.T) {

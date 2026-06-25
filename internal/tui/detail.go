@@ -208,10 +208,6 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 			m.response = msg.resp
 			m.errMsg = ""
 			m.mode = modeResponse
-			// Run assertions
-			if m.request != nil && len(m.request.Assertions) > 0 {
-				m.response.AssertionResults = assert.EvaluateAll(m.request, m.response)
-			}
 		}
 		m.respOffset = 0
 		hasAssertions := m.response != nil && len(m.response.AssertionResults) > 0
@@ -580,6 +576,11 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 						// Attach script error to response for display
 						resp.ScriptError = scriptErr.Error()
 					}
+				}
+				// Evaluate assertions against the resolved request so the
+				// expected (RHS) values reflect interpolated variables.
+				if err == nil && len(loaded.Assertions) > 0 {
+					resp.AssertionResults = assert.EvaluateAll(loaded, resp)
 				}
 				return responseReceived{resp: resp, err: err}
 			}

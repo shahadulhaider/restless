@@ -52,6 +52,27 @@ func TestEnginePOSTWithBody(t *testing.T) {
 	assert.Contains(t, string(received), "test")
 }
 
+func TestEngineDuplicateHeaders(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Values("X-Dup")
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	req := &model.Request{
+		Method: "GET",
+		URL:    srv.URL,
+		Headers: []model.Header{
+			{Key: "X-Dup", Value: "one"},
+			{Key: "X-Dup", Value: "two"},
+		},
+	}
+	_, err := Execute(req)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"one", "two"}, got, "duplicate request headers must both be sent")
+}
+
 func TestEngineNoRedirect(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {

@@ -8,8 +8,8 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"net/http/httptrace"
+	"net/url"
 	"strings"
 	"time"
 
@@ -87,7 +87,7 @@ func ExecuteWithJar(req *model.Request, jar http.CookieJar) (*model.Response, er
 	}
 
 	for _, h := range req.Headers {
-		httpReq.Header.Set(h.Key, h.Value)
+		httpReq.Header.Add(h.Key, h.Value)
 	}
 
 	resp, err := client.Do(httpReq)

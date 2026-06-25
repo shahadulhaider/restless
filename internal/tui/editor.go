@@ -73,6 +73,17 @@ type EditorModel struct {
 	noRedirect   bool
 	noCookieJar  bool
 	timeoutSecs  lineEdit
+
+	// Fields the form cannot edit, carried verbatim from the source request so
+	// a save does not strip them (assertions, scripts, @insecure/@proxy/
+	// @connection-timeout, HTTP version).
+	assertions         []model.Assertion
+	preRequestScript   string
+	postResponseScript string
+	httpVersion        string
+	insecure           bool
+	proxy              string
+	connTimeout        time.Duration
 }
 
 func NewEditorModel() EditorModel {
@@ -121,6 +132,13 @@ func NewEditorModelFromRequest(req model.Request) EditorModel {
 	if req.Metadata.Timeout > 0 {
 		m.timeoutSecs = newLineEdit(strconv.Itoa(int(req.Metadata.Timeout.Seconds())))
 	}
+	m.assertions = req.Assertions
+	m.preRequestScript = req.PreRequestScript
+	m.postResponseScript = req.PostResponseScript
+	m.httpVersion = req.HTTPVersion
+	m.insecure = req.Metadata.Insecure
+	m.proxy = req.Metadata.Proxy
+	m.connTimeout = req.Metadata.ConnTimeout
 	return m
 }
 
@@ -152,6 +170,13 @@ func (m EditorModel) Request() model.Request {
 	if secs, err := strconv.Atoi(strings.TrimSpace(m.timeoutSecs.String())); err == nil && secs > 0 {
 		req.Metadata.Timeout = time.Duration(secs) * time.Second
 	}
+	req.Assertions = m.assertions
+	req.PreRequestScript = m.preRequestScript
+	req.PostResponseScript = m.postResponseScript
+	req.HTTPVersion = m.httpVersion
+	req.Metadata.Insecure = m.insecure
+	req.Metadata.Proxy = m.proxy
+	req.Metadata.ConnTimeout = m.connTimeout
 	return req
 }
 

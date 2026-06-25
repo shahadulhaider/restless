@@ -517,11 +517,6 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					})
 				}
 				// No $EDITOR set — fall back to internal editor
-				if editorWouldLoseFields(*sel) {
-					var cmd tea.Cmd
-					m.statusText, cmd = setStatus("Built-in editor can't edit assertions/scripts — set $EDITOR to edit")
-					return m, cmd
-				}
 				m.editor = NewEditorModelFromRequest(*sel)
 				m.editor.SetAvailableVars(m.collectAvailableVars())
 				m.editingReq = sel
@@ -531,11 +526,6 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "E":
 			// Always open internal editor
 			if sel := m.browser.selected; sel != nil {
-				if editorWouldLoseFields(*sel) {
-					var cmd tea.Cmd
-					m.statusText, cmd = setStatus("Built-in editor can't edit assertions/scripts — use the external $EDITOR (e)")
-					return m, cmd
-				}
 				m.editor = NewEditorModelFromRequest(*sel)
 				m.editor.SetAvailableVars(m.collectAvailableVars())
 				m.editingReq = sel
@@ -726,19 +716,6 @@ func (m App) collectAvailableVars() []string {
 		}
 	}
 	return vars
-}
-
-// editorWouldLoseFields reports whether the built-in editor would silently drop
-// fields EditorModel cannot represent. The external $EDITOR path edits raw .http
-// text and is lossless.
-func editorWouldLoseFields(req model.Request) bool {
-	return len(req.Assertions) > 0 ||
-		req.PreRequestScript != "" ||
-		req.PostResponseScript != "" ||
-		req.HTTPVersion != "" ||
-		req.Metadata.Insecure ||
-		req.Metadata.Proxy != "" ||
-		req.Metadata.ConnTimeout > 0
 }
 
 // buildEditorCmd creates an *exec.Cmd for the given editor binary and file path.

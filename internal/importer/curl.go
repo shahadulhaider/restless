@@ -1,6 +1,7 @@
 package importer
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -72,7 +73,7 @@ func ParseCurlCommand(cmd string) (*model.Request, error) {
 			i++
 			req.Headers = append(req.Headers, model.Header{
 				Key:   "Authorization",
-				Value: "Basic " + tokens[i],
+				Value: "Basic " + base64.StdEncoding.EncodeToString([]byte(tokens[i])),
 			})
 
 		case tok == "-b" || tok == "--cookie":

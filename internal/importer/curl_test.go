@@ -47,7 +47,15 @@ func TestParseCurlBasicAuth(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, req.Headers, 1)
 	assert.Equal(t, "Authorization", req.Headers[0].Key)
-	assert.Equal(t, "Basic admin:secret", req.Headers[0].Value)
+	assert.Equal(t, "Basic YWRtaW46c2VjcmV0", req.Headers[0].Value)
+}
+
+func TestParseCurlBasicAuthBase64(t *testing.T) {
+	req, err := ParseCurlCommand("curl -u user:pass https://api.example.com/secure")
+	require.NoError(t, err)
+	require.Len(t, req.Headers, 1)
+	assert.Equal(t, "Authorization", req.Headers[0].Key)
+	assert.Equal(t, "Basic dXNlcjpwYXNz", req.Headers[0].Value)
 }
 
 func TestParseCurlDataImpliesPost(t *testing.T) {

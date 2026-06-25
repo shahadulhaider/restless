@@ -84,6 +84,11 @@ type EditorModel struct {
 	insecure           bool
 	proxy              string
 	connTimeout        time.Duration
+
+	// External body-file reference (the `< file` form). The form edits an
+	// inline body only, so this is carried verbatim and restored on save when
+	// no inline body was typed (inline body wins).
+	bodyFile string
 }
 
 func NewEditorModel() EditorModel {
@@ -139,6 +144,7 @@ func NewEditorModelFromRequest(req model.Request) EditorModel {
 	m.insecure = req.Metadata.Insecure
 	m.proxy = req.Metadata.Proxy
 	m.connTimeout = req.Metadata.ConnTimeout
+	m.bodyFile = req.BodyFile
 	return m
 }
 
@@ -165,6 +171,9 @@ func (m EditorModel) Request() model.Request {
 		bodyLines = append(bodyLines, l.String())
 	}
 	req.Body = strings.TrimRight(strings.Join(bodyLines, "\n"), "\n")
+	if req.Body == "" {
+		req.BodyFile = m.bodyFile
+	}
 	req.Metadata.NoRedirect = m.noRedirect
 	req.Metadata.NoCookieJar = m.noCookieJar
 	if secs, err := strconv.Atoi(strings.TrimSpace(m.timeoutSecs.String())); err == nil && secs > 0 {

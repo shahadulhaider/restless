@@ -53,3 +53,64 @@ func TestEditorModelPreservesCarriedFieldsOnSave(t *testing.T) {
 	assert.True(t, saved.Metadata.NoRedirect)
 	assert.Equal(t, 30*time.Second, saved.Metadata.Timeout)
 }
+
+func TestEditorModelPreservesBodyFileWhenNoInlineBodyTyped(t *testing.T) {
+	req := model.Request{
+		Name:     "filed",
+		Method:   "POST",
+		URL:      "https://api.example.com/old",
+		BodyFile: "./payload.json",
+	}
+
+	m := NewEditorModelFromRequest(req)
+	m.focus = fieldURL
+	for _, r := range "/v2" {
+		m.url.HandleKey(string(r))
+	}
+
+	saved := m.Request()
+
+	assert.Equal(t, "https://api.example.com/old/v2", saved.URL)
+	assert.Equal(t, "./payload.json", saved.BodyFile)
+	assert.Equal(t, "", saved.Body)
+}
+
+func TestEditorModelInlineBodyClearsBodyFile(t *testing.T) {
+	req := model.Request{
+		Name:     "filed",
+		Method:   "POST",
+		URL:      "https://api.example.com",
+		BodyFile: "./payload.json",
+	}
+
+	m := NewEditorModelFromRequest(req)
+	m.focus = fieldBody
+	for _, r := range `{"typed":true}` {
+		m.body[m.bodyCursor].HandleKey(string(r))
+	}
+
+	saved := m.Request()
+
+	assert.Equal(t, `{"typed":true}`, saved.Body)
+	assert.Equal(t, "", saved.BodyFile)
+}
+
+func TestEditorModelSavesFormControlledMetadataChanges(t *testing.T) {
+	req := model.Request{
+		Method:   "GET",
+		URL:      "https://api.example.com",
+		Metadata: model.RequestMetadata{NoRedirect: false},
+	}
+
+	m := NewEditorModelFromRequest(req)
+	m.noRedirect = true
+	m.focus = fieldTimeout
+	for _, r := range "45" {
+		m.timeoutSecs.HandleKeyFiltered(string(r), isDigit)
+	}
+
+	saved := m.Request()
+
+	assert.True(t, saved.Metadata.NoRedirect)
+	assert.Equal(t, 45*time.Second, saved.Metadata.Timeout)
+}

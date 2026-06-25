@@ -137,6 +137,24 @@ func TestRunUnknownFormatErrors(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown output format")
 }
 
+func TestRunUnknownEnvErrors(t *testing.T) {
+	dir := t.TempDir()
+	httpFile := filepath.Join(dir, "test.http")
+	require.NoError(t, os.WriteFile(httpFile, []byte("GET http://127.0.0.1:1/health\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "restless.env.json"),
+		[]byte(`{"dev":{"baseUrl":"http://localhost:8000"}}`), 0644))
+
+	var out, errOut bytes.Buffer
+	_, err := Run(RunConfig{
+		FilePath:  httpFile,
+		EnvName:   "doesNotExist",
+		Output:    &out,
+		ErrOutput: &errOut,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
 func TestRunFailFast(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)

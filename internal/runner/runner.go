@@ -62,11 +62,15 @@ func Run(cfg RunConfig) (RunResult, error) {
 	baseVars := make(map[string]string)
 	if cfg.EnvName != "" {
 		envFile, loadErr := parser.LoadEnvironments(rootDir)
-		if loadErr == nil && envFile != nil {
-			vars, _ := parser.ResolveEnvironment(envFile, cfg.EnvName)
-			for k, v := range vars {
-				baseVars[k] = v
-			}
+		if loadErr != nil {
+			return RunResult{}, loadErr
+		}
+		vars, resolveErr := parser.ResolveEnvironment(envFile, cfg.EnvName)
+		if resolveErr != nil {
+			return RunResult{}, resolveErr
+		}
+		for k, v := range vars {
+			baseVars[k] = v
 		}
 	}
 	fileVars, _ := parser.ExtractFileVariablesFromFile(cfg.FilePath)

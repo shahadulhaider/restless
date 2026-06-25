@@ -39,6 +39,14 @@ func ResolveRequest(req *model.Request, vars map[string]string, chainCtx *ChainC
 
 	resolved.Body = resolveString(req.Body, vars, chainCtx)
 
+	if len(req.Assertions) > 0 {
+		resolved.Assertions = make([]model.Assertion, len(req.Assertions))
+		for i, a := range req.Assertions {
+			a.Expected = resolveString(a.Expected, vars, chainCtx)
+			resolved.Assertions[i] = a
+		}
+	}
+
 	return &resolved, nil
 }
 

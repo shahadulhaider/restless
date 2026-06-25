@@ -57,10 +57,10 @@ type EditorModel struct {
 	height int
 
 	// Variable auto-complete
-	showComplete    bool
-	completions     []string
-	completeIdx     int
-	availableVars   []string // set externally from env + file vars
+	showComplete  bool
+	completions   []string
+	completeIdx   int
+	availableVars []string // set externally from env + file vars
 
 	name         lineEdit
 	methodIdx    int
@@ -218,11 +218,11 @@ func (m EditorModel) Update(msg tea.Msg) (EditorModel, tea.Cmd) {
 				m.methodIdx = (m.methodIdx + 1) % len(httpMethods)
 			}
 		case fieldNoRedirect:
-			if key == " " || key == "enter" {
+			if key == " " || key == "space" || key == "enter" {
 				m.noRedirect = !m.noRedirect
 			}
 		case fieldNoCookieJar:
-			if key == " " || key == "enter" {
+			if key == " " || key == "space" || key == "enter" {
 				m.noCookieJar = !m.noCookieJar
 			}
 		case fieldName:

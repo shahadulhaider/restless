@@ -511,7 +511,7 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 		m.toggleSection(1)
 	case "3":
 		m.toggleSection(2)
-	case " ":
+	case " ", "space":
 		cur := m.sectionAtOffset()
 		m.toggleSection(int(cur))
 

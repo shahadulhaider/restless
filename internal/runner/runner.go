@@ -58,20 +58,19 @@ func Run(cfg RunConfig) (RunResult, error) {
 		return RunResult{}, fmt.Errorf("parsing %s: %w", cfg.FilePath, err)
 	}
 
-	// Base variables: env + file vars
+	// Base variables: env + file vars. Load the env file even when no --env is
+	// given so $shared applies; a named-but-missing --env still errors below.
 	baseVars := make(map[string]string)
-	if cfg.EnvName != "" {
-		envFile, loadErr := parser.LoadEnvironments(rootDir)
-		if loadErr != nil {
-			return RunResult{}, loadErr
-		}
-		vars, resolveErr := parser.ResolveEnvironment(envFile, cfg.EnvName)
-		if resolveErr != nil {
-			return RunResult{}, resolveErr
-		}
-		for k, v := range vars {
-			baseVars[k] = v
-		}
+	envFile, loadErr := parser.LoadEnvironments(rootDir)
+	if loadErr != nil {
+		return RunResult{}, loadErr
+	}
+	vars, resolveErr := parser.ResolveEnvironment(envFile, cfg.EnvName)
+	if resolveErr != nil {
+		return RunResult{}, resolveErr
+	}
+	for k, v := range vars {
+		baseVars[k] = v
 	}
 	fileVars, _ := parser.ExtractFileVariablesFromFile(cfg.FilePath)
 	for k, v := range fileVars {

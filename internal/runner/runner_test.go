@@ -156,6 +156,32 @@ func TestRunUnknownEnvErrors(t *testing.T) {
 	assert.Contains(t, err.Error(), "not found")
 }
 
+func TestRunSharedAppliedWithoutEnv(t *testing.T) {
+	var gotShared string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotShared = r.URL.Query().Get("s")
+		w.WriteHeader(200)
+		w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	httpFile := filepath.Join(dir, "test.http")
+	content := "GET " + srv.URL + "/get?s={{sharedOnly}}\n"
+	require.NoError(t, os.WriteFile(httpFile, []byte(content), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "restless.env.json"),
+		[]byte(`{"$shared":{"sharedOnly":"shared-val"},"dev":{"x":"y"}}`), 0644))
+
+	var out, errOut bytes.Buffer
+	_, err := Run(RunConfig{
+		FilePath:  httpFile,
+		Output:    &out,
+		ErrOutput: &errOut,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "shared-val", gotShared, "$shared vars must apply even when no --env is selected")
+}
+
 func TestRunFailFast(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)

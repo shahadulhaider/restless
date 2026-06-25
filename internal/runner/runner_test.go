@@ -2,6 +2,7 @@ package runner
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -178,4 +179,39 @@ func TestRunFailFast(t *testing.T) {
 	assert.True(t, result.AnyFailed)
 	// Should stop after first failure — only 1 request executed
 	assert.Equal(t, 1, result.TotalRequests)
+}
+
+func TestRunDataJSONIterationsField(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	httpFile := filepath.Join(dir, "test.http")
+	content := "GET " + srv.URL + "/users?name={{name}}\n"
+	require.NoError(t, os.WriteFile(httpFile, []byte(content), 0644))
+
+	csvFile := filepath.Join(dir, "data.csv")
+	require.NoError(t, os.WriteFile(csvFile, []byte("name\nAlice\nBob\nCharlie\n"), 0644))
+
+	var out, errOut bytes.Buffer
+	_, err := Run(RunConfig{
+		FilePath:  httpFile,
+		DataFile:  csvFile,
+		Format:    FormatJSON,
+		Output:    &out,
+		ErrOutput: &errOut,
+	})
+	require.NoError(t, err)
+
+	var report jsonReport
+	require.NoError(t, json.Unmarshal(out.Bytes(), &report))
+	require.Len(t, report.Iterations, 3)
+	assert.Equal(t, 1, report.Iterations[0].Index)
+	assert.True(t, report.Iterations[0].Passed)
+	assert.Equal(t, "Alice", report.Iterations[0].DataVars["name"])
+	assert.Equal(t, 3, report.Iterations[2].Index)
+	assert.Equal(t, "Charlie", report.Iterations[2].DataVars["name"])
 }

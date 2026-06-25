@@ -289,6 +289,14 @@ func Run(cfg RunConfig) (RunResult, error) {
 			result.PassedIterations++
 		}
 
+		if report != nil {
+			report.Iterations = append(report.Iterations, jsonIteration{
+				Index:    iterIdx + 1,
+				Passed:   iterPassed,
+				DataVars: dataRow,
+			})
+		}
+
 		// Delay between iterations
 		if cfg.Delay > 0 && iterIdx < len(dataRows)-1 {
 			time.Sleep(cfg.Delay)

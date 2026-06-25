@@ -44,6 +44,14 @@ func (m *SearchModel) SetItems(items []SearchResult) {
 	m.cursor = 0
 }
 
+// Reset clears the query and selection so the overlay opens fresh each time,
+// while keeping the loaded item set.
+func (m *SearchModel) Reset() {
+	m.input = ""
+	m.results = m.allItems
+	m.cursor = 0
+}
+
 func fuzzyMatch(query, target string) bool {
 	query = strings.ToLower(query)
 	target = strings.ToLower(target)

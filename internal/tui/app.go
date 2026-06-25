@@ -495,6 +495,7 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "/":
+			m.search.Reset()
 			m.showSearch = true
 			return m, nil
 		case "ctrl+e":

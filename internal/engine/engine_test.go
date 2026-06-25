@@ -93,6 +93,17 @@ func TestEngineNoRedirect(t *testing.T) {
 	assert.Equal(t, 302, resp.StatusCode)
 }
 
+func TestEngineInvalidProxyErrors(t *testing.T) {
+	req := &model.Request{
+		Method:   "GET",
+		URL:      "http://127.0.0.1:9/get",
+		Metadata: model.RequestMetadata{Proxy: "::bad::"},
+	}
+	_, err := Execute(req)
+	require.Error(t, err, "an invalid @proxy URL must error instead of going direct")
+	assert.Contains(t, err.Error(), "invalid proxy URL")
+}
+
 func TestEngineTimeout(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(500 * time.Millisecond)

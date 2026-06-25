@@ -38,9 +38,10 @@ func ExecuteWithJar(req *model.Request, jar http.CookieJar) (*model.Response, er
 
 	if req.Metadata.Proxy != "" {
 		proxyURL, err := url.Parse(req.Metadata.Proxy)
-		if err == nil {
-			transport.Proxy = http.ProxyURL(proxyURL)
+		if err != nil {
+			return nil, fmt.Errorf("invalid proxy URL %q: %w", req.Metadata.Proxy, err)
 		}
+		transport.Proxy = http.ProxyURL(proxyURL)
 	}
 
 	clientTimeout := 0 * time.Second

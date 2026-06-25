@@ -223,7 +223,7 @@ func Run(cfg RunConfig) (RunResult, error) {
 							if r.Error != "" {
 								msg += fmt.Sprintf(" (%s)", r.Error)
 							} else {
-								msg += fmt.Sprintf(" (got %s)", r.Actual)
+								msg += fmt.Sprintf(" (got %s)", stripANSI(r.Actual))
 							}
 							fmt.Fprintln(cfg.Output, msg)
 						}

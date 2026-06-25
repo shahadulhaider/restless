@@ -1308,7 +1308,7 @@ func (m DetailModel) renderResponseBodyContent() string {
 	if m.prettyPrint {
 		raw = formatBody(m.response, m.bodyWidth())
 	} else {
-		raw = string(m.response.Body)
+		raw = stripANSI(string(m.response.Body))
 	}
 	lines := strings.Split(raw, "\n")
 	if m.wordWrap {

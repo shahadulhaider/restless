@@ -5,8 +5,18 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"regexp"
 	"time"
 )
+
+// ansiPattern matches ANSI CSI escape sequences (e.g. SGR color codes).
+var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+// stripANSI removes ANSI escape sequences so echoed response bytes don't corrupt
+// terminal or XML output. Display-only; never applied to stored bodies.
+func stripANSI(s string) string {
+	return ansiPattern.ReplaceAllString(s, "")
+}
 
 // OutputFormat determines the output format for the runner.
 type OutputFormat string
@@ -36,8 +46,8 @@ type jsonSummary struct {
 }
 
 type jsonIteration struct {
-	Index    int            `json:"index"`
-	Passed   bool           `json:"passed"`
+	Index    int               `json:"index"`
+	Passed   bool              `json:"passed"`
 	DataVars map[string]string `json:"data_vars,omitempty"`
 }
 
@@ -117,7 +127,7 @@ func writeJUnit(w io.Writer, report *jsonReport, filePath string) {
 			var details string
 			for _, a := range req.Assertions {
 				if !a.Passed {
-					details += fmt.Sprintf("%s (got %s)\n", a.Expression, a.Actual)
+					details += fmt.Sprintf("%s (got %s)\n", a.Expression, stripANSI(a.Actual))
 				}
 			}
 			tc.Failure = &junitFailure{

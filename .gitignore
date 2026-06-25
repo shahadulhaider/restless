@@ -6,6 +6,9 @@ bin/
 *.so
 *.dylib
 
+# Root build binary (go build ./cmd/restless)
+/restless
+
 # Test binary
 *.test
 

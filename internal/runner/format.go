@@ -27,6 +27,16 @@ const (
 	FormatJUnit OutputFormat = "junit" // JUnit XML for CI
 )
 
+// IsValid reports whether f is a supported format ("" defaults to text).
+func (f OutputFormat) IsValid() bool {
+	switch f {
+	case "", FormatText, FormatJSON, FormatJUnit:
+		return true
+	default:
+		return false
+	}
+}
+
 // --- JSON output ---
 
 type jsonReport struct {

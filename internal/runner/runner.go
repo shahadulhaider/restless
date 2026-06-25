@@ -48,6 +48,9 @@ func Run(cfg RunConfig) (RunResult, error) {
 	if cfg.ErrOutput == nil {
 		cfg.ErrOutput = os.Stderr
 	}
+	if !cfg.Format.IsValid() {
+		return RunResult{}, fmt.Errorf("unknown output format %q (valid: text, json, junit)", cfg.Format)
+	}
 
 	rootDir := filepath.Dir(cfg.FilePath)
 	reqs, err := parser.ParseFile(cfg.FilePath)

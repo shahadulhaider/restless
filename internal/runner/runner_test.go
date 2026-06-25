@@ -121,6 +121,22 @@ func TestRunMissingBodyFile(t *testing.T) {
 	assert.False(t, serverHit, "request must not be sent when the body file is missing")
 }
 
+func TestRunUnknownFormatErrors(t *testing.T) {
+	dir := t.TempDir()
+	httpFile := filepath.Join(dir, "test.http")
+	require.NoError(t, os.WriteFile(httpFile, []byte("GET http://127.0.0.1:1/health\n"), 0644))
+
+	var out, errOut bytes.Buffer
+	_, err := Run(RunConfig{
+		FilePath:  httpFile,
+		Format:    "bogus",
+		Output:    &out,
+		ErrOutput: &errOut,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown output format")
+}
+
 func TestRunFailFast(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)

@@ -5,11 +5,20 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
+
+// openAPIPathParamRe matches OpenAPI path placeholders such as {id}; the inner
+// class excludes braces so it never matches an already-converted {{var}}.
+var openAPIPathParamRe = regexp.MustCompile(`\{([^{}]+)\}`)
+
+func convertPathParams(path string) string {
+	return openAPIPathParamRe.ReplaceAllString(path, "{{$1}}")
+}
 
 // ImportOpenAPI imports an OpenAPI 3.x or Swagger 2.0 file and writes .http files.
 // Supports JSON and YAML input.
@@ -118,12 +127,7 @@ func renderOperation(method, path string, op openAPIOperation, baseURL string) s
 	}
 
 	// Build URL — substitute path params with template vars
-	urlPath := path
-	for _, p := range op.Parameters {
-		if p.In == "path" {
-			urlPath = strings.ReplaceAll(urlPath, "{"+p.Name+"}", "{{"+p.Name+"}}")
-		}
-	}
+	urlPath := convertPathParams(path)
 
 	// Build query string from required query params
 	var queryParts []string

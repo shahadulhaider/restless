@@ -108,6 +108,21 @@ const relativeServerOpenAPI = `{
   }
 }`
 
+const openAPIUndeclaredPathParam = `{
+  "openapi": "3.0.0",
+  "info": {"title": "Thing API", "version": "1.0.0"},
+  "servers": [{"url": "https://api.things.example.com"}],
+  "paths": {
+    "/things/{id}": {
+      "post": {
+        "operationId": "createThing",
+        "tags": ["things"],
+        "responses": {}
+      }
+    }
+  }
+}`
+
 const openAPIYAML = `openapi: "3.0.0"
 info:
   title: YAML API
@@ -197,6 +212,20 @@ func TestImportOpenAPIYAML(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(out, "items.http"))
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "GET https://api.yaml.example.com/items")
+}
+
+func TestImportOpenAPIUndeclaredPathParam(t *testing.T) {
+	spec := filepath.Join(t.TempDir(), "openapi.json")
+	require.NoError(t, os.WriteFile(spec, []byte(openAPIUndeclaredPathParam), 0644))
+
+	out := t.TempDir()
+	require.NoError(t, ImportOpenAPI(spec, ImportOptions{OutputDir: out}))
+
+	content, err := os.ReadFile(filepath.Join(out, "things.http"))
+	require.NoError(t, err)
+	s := string(content)
+	assert.Contains(t, s, "/things/{{id}}")
+	assert.NotContains(t, s, "/things/{id}")
 }
 
 func TestImportOpenAPIEnvFileName(t *testing.T) {

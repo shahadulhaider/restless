@@ -73,7 +73,6 @@ restless run api.http
 - **$EDITOR integration** — press `e` to edit in nvim/vim/code
 - **Vim-style commands** — `zo`/`zc`/`zR`/`zM` folds, `yb`/`yh`/`ya`/`yc` yank
 - **Cookie jar** — cookies persist per environment automatically
-- **Response history** — browse past responses with `h`, diff with `d`
 - **Pre-request & post-response scripting** — JavaScript (ES5.1) via `# @pre-request { ... }` and `# @post-response { ... }` with crypto builtins (hmac, sha256, base64)
 - **Proxy & SSL** — `# @insecure`, `# @proxy`, `--insecure`, `--proxy` flags
 - **Readline/emacs editing** — `Ctrl+A/E/W/U/K`, arrow keys, word navigation in editor
@@ -88,7 +87,7 @@ Press `?` in the TUI for the full reference. Press `F1` for context-sensitive he
 | `Enter` | Send request / select |
 | `e` | Edit in `$EDITOR` |
 | `r/s` | Request / Response view |
-| `1/2/3/4` | Toggle sections |
+| `1/2/3` | Toggle sections |
 | `Space` | Fold/unfold section |
 | `yb/yh/ya/yc` | Copy body/headers/all/curl |
 | `yg` + key | Generate code |

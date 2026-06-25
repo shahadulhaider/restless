@@ -57,7 +57,7 @@ restless .
 
 ### 4. Explore the Response
 
-- Press `1`/`2`/`3`/`4` to toggle sections (Body, Headers, Timing, Assertions)
+- Press `1`/`2`/`3` to toggle Body, Headers, and Timing sections; toggle Assertions with `Space`
 - Press `Space` to fold/unfold the section under your cursor
 - Press `p` to toggle pretty-print vs raw
 - Press `f` to search in the response body

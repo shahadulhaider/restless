@@ -132,13 +132,11 @@ func fullKeybindingReference() string {
 	writeKeys(&sb, key, [][2]string{
 		{"r / s", "Switch to Request / Response view"},
 		{"Enter / Ctrl+R", "Send request"},
-		{"h", "Toggle response history"},
-		{"d", "Diff two history entries"},
 	})
 
 	sb.WriteString("\n" + section.Render("Detail Pane — Sections") + "\n")
 	writeKeys(&sb, key, [][2]string{
-		{"1 / 2 / 3 / 4", "Toggle section fold"},
+		{"1 / 2 / 3", "Toggle section fold"},
 		{"Space", "Toggle fold on section under cursor"},
 		{"zo", "Expand section under cursor"},
 		{"zc", "Collapse section under cursor"},
@@ -284,15 +282,14 @@ func contextHelp(ctx string) string {
 
 	case "detail-response":
 		sb.WriteString(title.Render("Response View — Help") + "\n\n")
-		sb.WriteString(tip.Render("Inspect the response. Body is expanded by default. Fold sections with 1/2/3/4.") + "\n\n")
+		sb.WriteString(tip.Render("Inspect the response. Body is expanded by default. Fold sections with 1/2/3.") + "\n\n")
 
 		sb.WriteString(section.Render("Sections") + "\n")
 		writeKeys(&sb, key, [][2]string{
 			{"1", "[Body] — response body with JSON/XML formatting"},
 			{"2", "[Headers] — response headers"},
 			{"3", "[Timing] — DNS, TLS, TTFB waterfall"},
-			{"4", "[Assertions] — pass/fail results (if assertions defined)"},
-			{"Space", "Toggle fold on section under cursor"},
+			{"Space", "Toggle fold on section under cursor (Body, Headers, Timing, Assertions)"},
 			{"zo/zc", "Open/close section (vim fold)"},
 			{"zR/zM", "Expand all / collapse all"},
 		})
@@ -316,11 +313,6 @@ func contextHelp(ctx string) string {
 			{"yg + key", "Generate code from the request"},
 			{"v", "Visual selection mode (j/k to extend, y to copy)"},
 			{"gp", "Jump to JSON path"},
-		})
-		sb.WriteString("\n" + section.Render("History") + "\n")
-		writeKeys(&sb, key, [][2]string{
-			{"h", "Browse past responses"},
-			{"d", "Diff two history entries"},
 		})
 
 	case "editor":

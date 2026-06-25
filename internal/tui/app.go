@@ -588,7 +588,7 @@ func (m App) View() tea.View {
 					statusLine = " [r]req [s]resp │ 1/2/3:fold │ v:select │ y:yank(b/h/a/c/l/p/v/i) │ gp:path │ Enter:send"
 				}
 			} else {
-				statusLine = " Enter:send │ e:edit │ h:history │ q:quit"
+				statusLine = " Enter:send │ e:edit │ q:quit"
 			}
 		default:
 			statusLine = fmt.Sprintf(" env:%s │ tab:switch │ /:search │ ctrl+e:env │ q:quit", envLabel)

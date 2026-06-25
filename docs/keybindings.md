@@ -37,7 +37,7 @@ Press `F1` for context-sensitive help.
 | `r` / `s` | Switch to Request / Response view |
 | `Enter` / `Ctrl+R` | Send request |
 | `Space` | Toggle fold section under cursor |
-| `1` / `2` / `3` / `4` | Toggle sections |
+| `1` / `2` / `3` | Toggle sections |
 | `zo` | Expand section under cursor |
 | `zc` | Collapse section under cursor |
 | `zR` | Expand all sections |
@@ -50,8 +50,6 @@ Press `F1` for context-sensitive help.
 | `l` | Toggle line numbers |
 | `f` | Search in body |
 | `n` / `N` | Next / previous search match |
-| `h` | Toggle response history |
-| `d` | Diff two history entries |
 
 ## Yank (Copy)
 

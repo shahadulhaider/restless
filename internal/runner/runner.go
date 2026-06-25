@@ -117,6 +117,9 @@ func Run(cfg RunConfig) (RunResult, error) {
 	}
 	isText := cfg.Format == "" || cfg.Format == FormatText
 
+	// One cookie jar for the whole run so cookies persist across --data iterations.
+	cookies := engine.NewCookieManager()
+
 	for iterIdx, dataRow := range dataRows {
 		if multiIteration && isText {
 			preview := iterationPreview(dataRow, 60)
@@ -140,7 +143,6 @@ func Run(cfg RunConfig) (RunResult, error) {
 
 		iterPassed := true
 		chainCtx := parser.NewChainContext()
-		cookies := engine.NewCookieManager()
 
 		for _, req := range reqs {
 			result.TotalRequests++

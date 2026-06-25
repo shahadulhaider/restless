@@ -245,3 +245,38 @@ func TestRunDataOverridesEnvVar(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "data-token", gotToken, "--data column must override env var of the same name")
 }
+
+func TestRunCookiePersistsAcrossIterations(t *testing.T) {
+	var receivedSess []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if c, err := r.Cookie("sess"); err == nil {
+			receivedSess = append(receivedSess, c.Value)
+		} else {
+			receivedSess = append(receivedSess, "")
+		}
+		http.SetCookie(w, &http.Cookie{Name: "sess", Value: "v1", Path: "/"})
+		w.WriteHeader(200)
+		w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	httpFile := filepath.Join(dir, "test.http")
+	content := "GET " + srv.URL + "/track?row={{row}}\n"
+	require.NoError(t, os.WriteFile(httpFile, []byte(content), 0644))
+
+	csvFile := filepath.Join(dir, "data.csv")
+	require.NoError(t, os.WriteFile(csvFile, []byte("row\n1\n2\n"), 0644))
+
+	var out, errOut bytes.Buffer
+	_, err := Run(RunConfig{
+		FilePath:  httpFile,
+		DataFile:  csvFile,
+		Output:    &out,
+		ErrOutput: &errOut,
+	})
+	require.NoError(t, err)
+	require.Len(t, receivedSess, 2)
+	assert.Equal(t, "", receivedSess[0], "iteration 1 sends no cookie yet")
+	assert.Equal(t, "v1", receivedSess[1], "cookie from iteration 1 must persist into iteration 2")
+}

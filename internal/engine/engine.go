@@ -49,6 +49,11 @@ func ExecuteWithJar(req *model.Request, jar http.CookieJar) (*model.Response, er
 		clientTimeout = req.Metadata.Timeout
 	}
 
+	// @no-cookie-jar bypasses the jar: no stored cookies sent, no Set-Cookie persisted.
+	if req.Metadata.NoCookieJar {
+		jar = nil
+	}
+
 	client := &http.Client{
 		Transport: transport,
 		Timeout:   clientTimeout,

@@ -3,6 +3,7 @@ package engine
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -118,6 +119,41 @@ func TestEngineTimeout(t *testing.T) {
 	}
 	_, err := Execute(req)
 	assert.Error(t, err)
+}
+
+func TestEngineNoCookieJarBypassesJar(t *testing.T) {
+	var received []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if c, err := r.Cookie("sess"); err == nil {
+			received = append(received, c.Value)
+		} else {
+			received = append(received, "")
+		}
+		http.SetCookie(w, &http.Cookie{Name: "sess", Value: "v1", Path: "/"})
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	jar, err := cookiejar.New(nil)
+	require.NoError(t, err)
+
+	_, err = ExecuteWithJar(&model.Request{Method: "GET", URL: srv.URL}, jar)
+	require.NoError(t, err)
+
+	_, err = ExecuteWithJar(&model.Request{
+		Method:   "GET",
+		URL:      srv.URL,
+		Metadata: model.RequestMetadata{NoCookieJar: true},
+	}, jar)
+	require.NoError(t, err)
+
+	_, err = ExecuteWithJar(&model.Request{Method: "GET", URL: srv.URL}, jar)
+	require.NoError(t, err)
+
+	require.Len(t, received, 3)
+	assert.Equal(t, "", received[0], "first request has no cookie yet")
+	assert.Equal(t, "", received[1], "@no-cookie-jar request must not send the stored cookie")
+	assert.Equal(t, "v1", received[2], "a normal request still sends the stored cookie")
 }
 
 func TestEngineTimingPopulated(t *testing.T) {

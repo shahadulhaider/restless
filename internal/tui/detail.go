@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
@@ -87,9 +88,13 @@ type DetailModel struct {
 	searchHits   []int
 	searchIdx    int
 
-	// Visual selection mode
-	selecting    bool
-	selectAnchor int // line index where selection started
+	// Visual selection mode (character-level)
+	selecting       bool
+	selectAnchor    int      // anchor line
+	selectAnchorCol int      // anchor column (rune index)
+	selectCursor    int      // cursor line (decoupled from scroll offset)
+	selectCol       int      // cursor column (rune index)
+	selectLines     []string // plain-text snapshot captured on entry
 
 	// JSON path jump
 	jumpingPath bool
@@ -329,68 +334,181 @@ func (m DetailModel) updateSearch(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 }
 
 func (m DetailModel) updateSelecting(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
+	last := len(m.selectLines) - 1
 	switch msg.String() {
 	case "esc":
 		m.selecting = false
+		m.selectLines = nil
 	case "j", "down":
-		m.setOffset(m.offset() + 1)
+		if m.selectCursor < last {
+			m.selectCursor++
+			m.clampSelectCol()
+			m.scrollToCursor()
+		}
 	case "k", "up":
-		if m.offset() > 0 {
-			m.setOffset(m.offset() - 1)
+		if m.selectCursor > 0 {
+			m.selectCursor--
+			m.clampSelectCol()
+			m.scrollToCursor()
 		}
+	case "h", "left":
+		if m.selectCol > 0 {
+			m.selectCol--
+		}
+	case "l", "right":
+		if m.selectCol < m.selectLineLen(m.selectCursor) {
+			m.selectCol++
+		}
+	case "0":
+		m.selectCol = 0
+	case "$":
+		m.selectCol = m.selectLineLen(m.selectCursor)
+	case "w":
+		m.selectCol = nextWordCol([]rune(m.selectLineAt(m.selectCursor)), m.selectCol)
+	case "b":
+		m.selectCol = prevWordCol([]rune(m.selectLineAt(m.selectCursor)), m.selectCol)
 	case "ctrl+d":
-		m.setOffset(m.offset() + m.viewableHeight()/2)
+		m.selectCursor = min(m.selectCursor+m.viewableHeight()/2, last)
+		m.clampSelectCol()
+		m.scrollToCursor()
 	case "ctrl+u":
-		off := m.offset() - m.viewableHeight()/2
-		if off < 0 {
-			off = 0
-		}
-		m.setOffset(off)
+		m.selectCursor = max(m.selectCursor-m.viewableHeight()/2, 0)
+		m.clampSelectCol()
+		m.scrollToCursor()
 	case "G":
-		m.setOffset(999999)
+		m.selectCursor = max(last, 0)
+		m.clampSelectCol()
+		m.scrollToCursor()
 	case "y":
-		text := m.selectedText()
+		text := m.selectedTextRange()
 		m.selecting = false
+		m.selectLines = nil
 		if text == "" {
 			return m, nil
 		}
-		return m, func() tea.Msg {
-			err := exporter.CopyToClipboard(text)
-			return yankResult{label: "selection", err: err}
-		}
+		return m, copyCmd(text, "selection")
 	}
 	return m, nil
 }
 
-func (m DetailModel) selectedText() string {
-	content := m.currentAccordionContent()
-	lines := strings.Split(content, "\n")
-	lo, hi := m.selectionRange()
-	if lo < 0 {
-		lo = 0
-	}
-	if hi >= len(lines) {
-		hi = len(lines) - 1
-	}
-	if lo > hi {
+func (m DetailModel) selectLineAt(i int) string {
+	if i < 0 || i >= len(m.selectLines) {
 		return ""
 	}
-	var sb strings.Builder
-	for i := lo; i <= hi; i++ {
-		sb.WriteString(strings.TrimSpace(stripANSI(lines[i])))
-		if i < hi {
-			sb.WriteString("\n")
-		}
+	return m.selectLines[i]
+}
+
+func (m DetailModel) selectLineLen(i int) int {
+	return len([]rune(m.selectLineAt(i)))
+}
+
+func (m *DetailModel) clampSelectCol() {
+	if n := m.selectLineLen(m.selectCursor); m.selectCol > n {
+		m.selectCol = n
 	}
+}
+
+func (m *DetailModel) scrollToCursor() {
+	vh := m.viewableHeight()
+	if m.selectCursor < m.offset() {
+		m.setOffset(m.selectCursor)
+	} else if m.selectCursor >= m.offset()+vh {
+		m.setOffset(m.selectCursor - vh + 1)
+	}
+}
+
+// selectionBounds returns the selection extent normalized so (loL,loC) precedes
+// (hiL,hiC) in reading order.
+func (m DetailModel) selectionBounds() (loL, loC, hiL, hiC int) {
+	if m.selectAnchor < m.selectCursor ||
+		(m.selectAnchor == m.selectCursor && m.selectAnchorCol <= m.selectCol) {
+		return m.selectAnchor, m.selectAnchorCol, m.selectCursor, m.selectCol
+	}
+	return m.selectCursor, m.selectCol, m.selectAnchor, m.selectAnchorCol
+}
+
+// lineSelCols returns the highlight span [a,b) for a line, inclusive of the
+// character under the cursor. ok is false when the line is outside the selection.
+func (m DetailModel) lineSelCols(lineIdx, lineLen int) (a, b int, ok bool) {
+	loL, loC, hiL, hiC := m.selectionBounds()
+	if lineIdx < loL || lineIdx > hiL {
+		return 0, 0, false
+	}
+	a, b = 0, lineLen
+	if lineIdx == loL {
+		a = loC
+	}
+	if lineIdx == hiL {
+		b = hiC + 1
+	}
+	if a < 0 {
+		a = 0
+	}
+	if b > lineLen {
+		b = lineLen
+	}
+	if a > b {
+		a = b
+	}
+	return a, b, true
+}
+
+func (m DetailModel) selectedTextRange() string {
+	loL, loC, hiL, hiC := m.selectionBounds()
+	if loL < 0 || loL >= len(m.selectLines) {
+		return ""
+	}
+	if hiL >= len(m.selectLines) {
+		hiL = len(m.selectLines) - 1
+	}
+	if loL == hiL {
+		return runeSlice(m.selectLines[loL], loC, hiC+1)
+	}
+	var sb strings.Builder
+	sb.WriteString(runeSlice(m.selectLines[loL], loC, -1))
+	for i := loL + 1; i < hiL; i++ {
+		sb.WriteString("\n" + m.selectLines[i])
+	}
+	sb.WriteString("\n" + runeSlice(m.selectLines[hiL], 0, hiC+1))
 	return sb.String()
 }
 
-func (m DetailModel) selectionRange() (int, int) {
-	a, b := m.selectAnchor, m.offset()
-	if a > b {
-		return b, a
+func runeSlice(s string, a, b int) string {
+	r := []rune(s)
+	if a < 0 {
+		a = 0
 	}
-	return a, b
+	if a > len(r) {
+		a = len(r)
+	}
+	if b < 0 || b > len(r) {
+		b = len(r)
+	}
+	if a > b {
+		return ""
+	}
+	return string(r[a:b])
+}
+
+func nextWordCol(runes []rune, col int) int {
+	n := len(runes)
+	for col < n && !unicode.IsSpace(runes[col]) {
+		col++
+	}
+	for col < n && unicode.IsSpace(runes[col]) {
+		col++
+	}
+	return col
+}
+
+func prevWordCol(runes []rune, col int) int {
+	for col > 0 && unicode.IsSpace(runes[col-1]) {
+		col--
+	}
+	for col > 0 && !unicode.IsSpace(runes[col-1]) {
+		col--
+	}
+	return col
 }
 
 func (m DetailModel) updateJumpPath(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
@@ -508,6 +626,14 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 	case "v":
 		m.selecting = true
 		m.selectAnchor = m.offset()
+		m.selectAnchorCol = 0
+		m.selectCursor = m.offset()
+		m.selectCol = 0
+		raw := strings.Split(m.currentAccordionContent(), "\n")
+		m.selectLines = make([]string, len(raw))
+		for i, l := range raw {
+			m.selectLines[i] = stripANSI(l)
+		}
 		return m, nil
 
 	// Request/Response toggle
@@ -793,10 +919,7 @@ func (m DetailModel) handleYank(key string) (DetailModel, tea.Cmd) {
 	if text == "" {
 		return m, nil
 	}
-	return m, func() tea.Msg {
-		err := exporter.CopyToClipboard(text)
-		return yankResult{label: label, err: err}
-	}
+	return m, copyCmd(text, label)
 }
 
 func (m DetailModel) yankCurrentLine() (string, string) {
@@ -897,10 +1020,7 @@ func (m DetailModel) handleCodeGen(key string) (DetailModel, tea.Cmd) {
 	code := gen.Generate(*m.request)
 	label := gen.Name + " code"
 
-	return m, func() tea.Msg {
-		err := exporter.CopyToClipboard(code)
-		return yankResult{label: label, err: err}
-	}
+	return m, copyCmd(code, label)
 }
 
 // --- Search ---
@@ -1021,22 +1141,23 @@ func (m DetailModel) View() string {
 	}
 
 	selectStyle := lipgloss.NewStyle().Background(colorSelBg).Foreground(colorSelFg)
-	selLo, selHi := m.selectionRange()
 	headerKey := make(map[int]string, len(result.ranges))
 	for _, sr := range result.ranges {
 		headerKey[sr.start] = fmt.Sprintf("%d", int(sr.sec)+1)
 	}
 	for i, l := range lines[off:end] {
 		lineIdx := off + i
-		if m.selecting && lineIdx >= selLo && lineIdx <= selHi {
-			plain := stripANSI(l)
-			sb.WriteString(selectStyle.Render(plain) + "\n")
-		} else {
-			if key, ok := headerKey[lineIdx]; ok {
-				l = zone.Mark("dt:sec:"+key, l)
+		if m.selecting {
+			runes := []rune(stripANSI(l))
+			if a, b, ok := m.lineSelCols(lineIdx, len(runes)); ok {
+				sb.WriteString(string(runes[:a]) + selectStyle.Render(string(runes[a:b])) + string(runes[b:]) + "\n")
+				continue
 			}
-			sb.WriteString(l + "\n")
 		}
+		if key, ok := headerKey[lineIdx]; ok {
+			l = zone.Mark("dt:sec:"+key, l)
+		}
+		sb.WriteString(l + "\n")
 	}
 
 	// Scroll indicator
@@ -1062,9 +1183,8 @@ func (m DetailModel) View() string {
 		sb.WriteString(lipgloss.NewStyle().Foreground(colorBorderActive).Render("find: " + m.searchQuery + "█" + matchInfo))
 	}
 	if m.selecting {
-		count := selHi - selLo + 1
 		sb.WriteString("\n" + lipgloss.NewStyle().Foreground(colorBorderActive).Render(
-			fmt.Sprintf("-- VISUAL -- %d line(s) selected  │  y:copy  esc:cancel", count)))
+			fmt.Sprintf("-- VISUAL -- L%d:C%d  │  h/l/j/k/w/b:move  0/$:line  y:copy  esc:cancel", m.selectCursor+1, m.selectCol+1)))
 	}
 	if m.jumpingPath {
 		sb.WriteString("\n" + lipgloss.NewStyle().Foreground(colorBorderActive).Render("path: "+m.jumpQuery+"█"))

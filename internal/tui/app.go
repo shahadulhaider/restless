@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	zone "github.com/lrstanley/bubblezone/v2"
 
 	"github.com/shahadulhaider/restless/internal/engine"
 	"github.com/shahadulhaider/restless/internal/history"
@@ -77,9 +78,11 @@ type App struct {
 	chainCtx      *parser.ChainContext
 	cookies       *engine.CookieManager
 	statusText    string // ephemeral status message
+	draggingSplit bool
 }
 
 func New(rootDir string) App {
+	zone.NewGlobal()
 	chainCtx := parser.NewChainContext()
 	cookies := engine.NewCookieManager()
 	return App{
@@ -122,6 +125,26 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.browser, bc = m.browser.Update(tea.WindowSizeMsg{Width: browserWidth, Height: m.height - 1})
 		m.detail, dc = m.detail.Update(tea.WindowSizeMsg{Width: detailWidth, Height: m.height - 1})
 		return m, tea.Batch(bc, dc)
+
+	case tea.MouseWheelMsg:
+		var cmd tea.Cmd
+		m, cmd = m.handleMouseWheel(msg)
+		return m, cmd
+
+	case tea.MouseClickMsg:
+		var cmd tea.Cmd
+		m, cmd = m.handleMouseClick(msg)
+		return m, cmd
+
+	case tea.MouseMotionMsg:
+		var cmd tea.Cmd
+		m, cmd = m.handleMouseMotion(msg)
+		return m, cmd
+
+	case tea.MouseReleaseMsg:
+		var cmd tea.Cmd
+		m, cmd = m.handleMouseRelease(msg)
+		return m, cmd
 
 	case collectionLoaded:
 		if msg.collection != nil {
@@ -661,8 +684,9 @@ func (m App) View() tea.View {
 		content = helpView
 	}
 
-	v := tea.NewView(content)
+	v := tea.NewView(zone.Scan(content))
 	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
 	return v
 }
 

@@ -58,7 +58,7 @@ func (m PromptModel) Update(msg tea.Msg) (PromptModel, tea.Cmd) {
 }
 
 func (m PromptModel) View() string {
-	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#CDD6F4")).Bold(true)
+	labelStyle := lipgloss.NewStyle().Foreground(colorText).Bold(true)
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(colorBorderActive).

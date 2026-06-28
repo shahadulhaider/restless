@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	zone "github.com/lrstanley/bubblezone/v2"
 
 	"github.com/shahadulhaider/restless/internal/model"
 	"github.com/shahadulhaider/restless/internal/parser"
@@ -36,15 +37,15 @@ type RequestSelected struct {
 }
 
 type BrowserModel struct {
-	collection    *model.Collection
-	items         []BrowserItem
-	cursor        int
-	expanded      map[string]bool
-	selected      *model.Request
-	height        int
-	width         int
-	offset        int
-	lastStatus    map[string]int // request key → last HTTP status code
+	collection *model.Collection
+	items      []BrowserItem
+	cursor     int
+	expanded   map[string]bool
+	selected   *model.Request
+	height     int
+	width      int
+	offset     int
+	lastStatus map[string]int // request key → last HTTP status code
 }
 
 func NewBrowserModel() BrowserModel {
@@ -194,6 +195,26 @@ func (m *BrowserModel) CurrentItem() *BrowserItem {
 	return nil
 }
 
+// ScrollBy moves the cursor by delta rows, keeping it and the viewport in range.
+func (m *BrowserModel) ScrollBy(delta int) {
+	if len(m.items) == 0 {
+		return
+	}
+	m.cursor += delta
+	if m.cursor < 0 {
+		m.cursor = 0
+	}
+	if m.cursor > len(m.items)-1 {
+		m.cursor = len(m.items) - 1
+	}
+	if m.cursor < m.offset {
+		m.offset = m.cursor
+	}
+	if m.height > 0 && m.cursor >= m.offset+m.height {
+		m.offset = m.cursor - m.height + 1
+	}
+}
+
 func (m BrowserModel) Init() tea.Cmd {
 	return nil
 }
@@ -221,22 +242,27 @@ func (m BrowserModel) Update(msg tea.Msg) (BrowserModel, tea.Cmd) {
 				}
 			}
 		case "enter":
-			if m.cursor < len(m.items) {
-				item := m.items[m.cursor]
-				switch item.Type {
-				case ItemTypeDir:
-					m.expanded[item.Path] = !m.expanded[item.Path]
-					m.items = m.buildItems()
-				case ItemTypeFile:
-					m.expanded[item.Path] = !m.expanded[item.Path]
-					m.items = m.buildItems()
-				case ItemTypeRequest:
-					m.selected = item.Request
-					return m, func() tea.Msg {
-						return RequestSelected{Request: item.Request}
-					}
-				}
-			}
+			return m.Activate()
+		}
+	}
+	return m, nil
+}
+
+// Activate expands/collapses the item under the cursor, or selects a request
+// (emitting RequestSelected). Shared by the Enter key and mouse clicks.
+func (m BrowserModel) Activate() (BrowserModel, tea.Cmd) {
+	if m.cursor >= len(m.items) {
+		return m, nil
+	}
+	item := m.items[m.cursor]
+	switch item.Type {
+	case ItemTypeDir, ItemTypeFile:
+		m.expanded[item.Path] = !m.expanded[item.Path]
+		m.items = m.buildItems()
+	case ItemTypeRequest:
+		m.selected = item.Request
+		return m, func() tea.Msg {
+			return RequestSelected{Request: item.Request}
 		}
 	}
 	return m, nil
@@ -288,9 +314,9 @@ func (m BrowserModel) View() string {
 			statusDot := ""
 			if code, ok := m.lastStatus[requestKey(item.Request)]; ok {
 				if code >= 200 && code < 300 {
-					statusDot = lipgloss.NewStyle().Foreground(lipgloss.Color("#4CAF50")).Render("● ")
+					statusDot = lipgloss.NewStyle().Foreground(colorSuccess).Render("● ")
 				} else if code >= 400 {
-					statusDot = lipgloss.NewStyle().Foreground(lipgloss.Color("#F44336")).Render("● ")
+					statusDot = lipgloss.NewStyle().Foreground(colorError).Render("● ")
 				} else {
 					statusDot = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFF00")).Render("● ")
 				}
@@ -300,11 +326,11 @@ func (m BrowserModel) View() string {
 
 		if i == m.cursor {
 			line = lipgloss.NewStyle().
-				Background(lipgloss.Color("#3D3D5C")).
-				Foreground(lipgloss.Color("#FFFFFF")).
+				Background(colorSelBg).
+				Foreground(colorSelFg).
 				Render(fmt.Sprintf("%-*s", m.width-item.Depth*2, line))
 		}
-		sb.WriteString(line + "\n")
+		sb.WriteString(zone.Mark(fmt.Sprintf("br:%d", i), line) + "\n")
 	}
 
 	return sb.String()
@@ -313,13 +339,13 @@ func (m BrowserModel) View() string {
 func methodColor(method string) color.Color {
 	switch strings.ToUpper(method) {
 	case "GET":
-		return lipgloss.Color("#4CAF50")
+		return colorSuccess
 	case "POST":
 		return lipgloss.Color("#2196F3")
 	case "PUT":
-		return lipgloss.Color("#FF9800")
+		return colorWarning
 	case "DELETE":
-		return lipgloss.Color("#F44336")
+		return colorError
 	case "PATCH":
 		return lipgloss.Color("#FF5722")
 	default:

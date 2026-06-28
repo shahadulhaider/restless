@@ -71,12 +71,12 @@ func (m ConfirmModel) Update(msg tea.Msg) (ConfirmModel, tea.Cmd) {
 
 func (m ConfirmModel) View() string {
 	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#CDD6F4")).
+		Foreground(colorText).
 		Bold(true)
 
 	selectedStyle := lipgloss.NewStyle().
 		Background(colorBorderActive).
-		Foreground(lipgloss.Color("#FFFFFF")).
+		Foreground(colorSelFg).
 		Padding(0, 2)
 
 	normalStyle := lipgloss.NewStyle().

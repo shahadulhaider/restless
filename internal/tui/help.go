@@ -96,7 +96,7 @@ func (m HelpModel) View() string {
 // --- Full keybinding reference (?) ---
 
 func fullKeybindingReference() string {
-	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#CDD6F4"))
+	title := lipgloss.NewStyle().Bold(true).Foreground(colorText)
 	section := lipgloss.NewStyle().Bold(true).Foreground(colorBorderActive)
 	key := lipgloss.NewStyle().Foreground(lipgloss.Color("#F9E2AF"))
 
@@ -214,7 +214,7 @@ func fullKeybindingReference() string {
 // --- Context-sensitive help (F1) ---
 
 func contextHelp(ctx string) string {
-	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#CDD6F4"))
+	title := lipgloss.NewStyle().Bold(true).Foreground(colorText)
 	section := lipgloss.NewStyle().Bold(true).Foreground(colorBorderActive)
 	key := lipgloss.NewStyle().Foreground(lipgloss.Color("#F9E2AF"))
 	tip := lipgloss.NewStyle().Foreground(lipgloss.Color("#A6E3A1")).Italic(true)

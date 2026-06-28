@@ -484,7 +484,7 @@ func (m EditorModel) View() string {
 	if m.mode == editorModeEdit {
 		title = "Edit Request"
 	}
-	sb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#CDD6F4")).Render(title))
+	sb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(colorText).Render(title))
 	sb.WriteString("\n\n")
 
 	sb.WriteString(m.renderLineEditField("Name", &m.name, m.focus == fieldName))

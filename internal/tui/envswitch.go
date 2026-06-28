@@ -98,7 +98,7 @@ func (m EnvModel) Update(msg tea.Msg) (EnvModel, tea.Cmd) {
 func (m EnvModel) View() string {
 	var sb strings.Builder
 	sb.WriteString(lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#CDD6F4")).
+		Foreground(colorText).
 		Bold(true).
 		Render("Select Environment") + "\n\n")
 
@@ -110,11 +110,11 @@ func (m EnvModel) View() string {
 		line := indicator + " " + name
 		if i == m.cursor {
 			line = lipgloss.NewStyle().
-				Background(lipgloss.Color("#3D3D5C")).
-				Foreground(lipgloss.Color("#FFFFFF")).
+				Background(colorSelBg).
+				Foreground(colorSelFg).
 				Render(line)
 		} else if indicator == "●" {
-			line = lipgloss.NewStyle().Foreground(lipgloss.Color("#4CAF50")).Render(line)
+			line = lipgloss.NewStyle().Foreground(colorSuccess).Render(line)
 		}
 		sb.WriteString(line + "\n")
 	}

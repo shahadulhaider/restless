@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/tidwall/pretty"
 
 	"github.com/tidwall/gjson"
@@ -155,6 +156,16 @@ func (m *DetailModel) setOffset(v int) {
 	} else {
 		m.respOffset = v
 	}
+}
+
+// ScrollBy moves the active view offset by delta lines (clamped at the top; the
+// bottom is clamped during View once content height is known).
+func (m *DetailModel) ScrollBy(delta int) {
+	off := m.offset() + delta
+	if off < 0 {
+		off = 0
+	}
+	m.setOffset(off)
 }
 
 func (m *DetailModel) folds() *[4]bool {
@@ -673,14 +684,14 @@ func (m DetailModel) sectionAtOffset() section {
 
 func (m DetailModel) diffView() string {
 	var sb strings.Builder
-	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#CDD6F4"))
+	title := lipgloss.NewStyle().Bold(true).Foreground(colorText)
 	sb.WriteString(title.Render("Response Diff") + "\n\n")
 
 	if m.diffText == "" {
 		sb.WriteString(dimStyle.Render("(no differences)"))
 	} else {
-		addStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#4CAF50"))
-		removeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F44336"))
+		addStyle := lipgloss.NewStyle().Foreground(colorSuccess)
+		removeStyle := lipgloss.NewStyle().Foreground(colorError)
 		for _, line := range strings.Split(m.diffText, "\n") {
 			if strings.HasPrefix(line, "+") {
 				sb.WriteString(addStyle.Render(line) + "\n")
@@ -946,7 +957,7 @@ func (m DetailModel) View() string {
 	}
 
 	if m.errMsg != "" {
-		sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#F44336")).Render("✗ " + m.errMsg))
+		sb.WriteString(lipgloss.NewStyle().Foreground(colorError).Render("✗ " + m.errMsg))
 		sb.WriteString("\n\n")
 	}
 
@@ -961,7 +972,7 @@ func (m DetailModel) View() string {
 		sb.WriteString(m.stickyStatus())
 		if m.response.ScriptError != "" {
 			sb.WriteString("\n")
-			sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#FF9800")).Render("⚠ script: " + m.response.ScriptError))
+			sb.WriteString(lipgloss.NewStyle().Foreground(colorWarning).Render("⚠ script: " + m.response.ScriptError))
 		}
 		// JSON path indicator
 		if m.respFolds[0] && len(m.response.Body) > 0 && strings.Contains(strings.ToLower(m.response.ContentType), "json") {
@@ -1009,14 +1020,21 @@ func (m DetailModel) View() string {
 		end = len(lines)
 	}
 
-	selectStyle := lipgloss.NewStyle().Background(lipgloss.Color("#3D3D5C")).Foreground(lipgloss.Color("#FFFFFF"))
+	selectStyle := lipgloss.NewStyle().Background(colorSelBg).Foreground(colorSelFg)
 	selLo, selHi := m.selectionRange()
+	headerKey := make(map[int]string, len(result.ranges))
+	for _, sr := range result.ranges {
+		headerKey[sr.start] = fmt.Sprintf("%d", int(sr.sec)+1)
+	}
 	for i, l := range lines[off:end] {
 		lineIdx := off + i
 		if m.selecting && lineIdx >= selLo && lineIdx <= selHi {
 			plain := stripANSI(l)
 			sb.WriteString(selectStyle.Render(plain) + "\n")
 		} else {
+			if key, ok := headerKey[lineIdx]; ok {
+				l = zone.Mark("dt:sec:"+key, l)
+			}
 			sb.WriteString(l + "\n")
 		}
 	}
@@ -1071,11 +1089,11 @@ func (m DetailModel) toggleBar() string {
 	reqStyle := dimStyle
 	respStyle := dimStyle
 	if m.mode == modeRequest {
-		reqStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#CDD6F4")).Underline(true)
+		reqStyle = lipgloss.NewStyle().Bold(true).Foreground(colorText).Underline(true)
 	} else {
-		respStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#CDD6F4")).Underline(true)
+		respStyle = lipgloss.NewStyle().Bold(true).Foreground(colorText).Underline(true)
 	}
-	return reqStyle.Render("[r] Request") + dimStyle.Render("  │  ") + respStyle.Render("[s] Response")
+	return zone.Mark("dt:req", reqStyle.Render("[r] Request")) + dimStyle.Render("  │  ") + zone.Mark("dt:resp", respStyle.Render("[s] Response"))
 }
 
 // --- Request accordion ---
@@ -1091,7 +1109,11 @@ func (m DetailModel) buildRequestAccordion() accordionResult {
 	bodySummary := "(empty)"
 	bodyPreview := ""
 	if req.Body != "" {
-		bodyContent = m.renderTextContent(req.Body)
+		src := req.Body
+		if m.prettyPrint {
+			src = colorizeBody(req.Body, requestContentType(req))
+		}
+		bodyContent = m.renderTextContent(src)
 		raw := strings.ReplaceAll(req.Body, "\n", " ")
 		bodySummary = truncate(strings.Join(strings.Fields(raw), " "), 50)
 		bodyPreview = previewLines(req.Body, 2, m.width)
@@ -1104,7 +1126,7 @@ func (m DetailModel) buildRequestAccordion() accordionResult {
 	if len(req.Headers) > 0 {
 		hdrSummary = fmt.Sprintf("(%d)", len(req.Headers))
 		var sb strings.Builder
-		keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#89DCEB"))
+		keyStyle := lipgloss.NewStyle().Foreground(colorKey)
 		for _, h := range req.Headers {
 			sb.WriteString(fmt.Sprintf("  %s: %s\n", keyStyle.Render(h.Key), h.Value))
 		}
@@ -1193,7 +1215,7 @@ func (m DetailModel) buildResponseAccordion() accordionResult {
 	hdrSummary := fmt.Sprintf("(%d)", len(resp.Headers))
 	hdrPreview := ""
 	if len(resp.Headers) > 0 {
-		keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#89DCEB"))
+		keyStyle := lipgloss.NewStyle().Foreground(colorKey)
 		var sb strings.Builder
 		for _, h := range resp.Headers {
 			sb.WriteString(fmt.Sprintf("  %s: %s\n", keyStyle.Render(h.Key), h.Value))
@@ -1242,8 +1264,8 @@ func (m DetailModel) buildResponseAccordion() accordionResult {
 		}
 
 		var assertContent strings.Builder
-		passStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#4CAF50"))
-		failStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F44336"))
+		passStyle := lipgloss.NewStyle().Foreground(colorSuccess)
+		failStyle := lipgloss.NewStyle().Foreground(colorError)
 		for _, r := range resp.AssertionResults {
 			if r.Passed {
 				assertContent.WriteString("  " + passStyle.Render("✓") + " " + r.Assertion.Raw + "\n")
@@ -1288,7 +1310,7 @@ func (m DetailModel) renderTextContent(body string) string {
 	}
 
 	lineNumWidth := len(fmt.Sprintf("%d", len(lines)))
-	lineNumStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#585858"))
+	lineNumStyle := lipgloss.NewStyle().Foreground(colorLineNum)
 
 	var sb strings.Builder
 	for i, line := range lines {
@@ -1335,9 +1357,9 @@ func (m DetailModel) renderResponseBodyContent() string {
 	}
 
 	lineNumWidth := len(fmt.Sprintf("%d", len(lines)))
-	lineNumStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#585858"))
+	lineNumStyle := lipgloss.NewStyle().Foreground(colorLineNum)
 	matchStyle := lipgloss.NewStyle().Background(lipgloss.Color("#3D3D00")).Foreground(lipgloss.Color("#FFFF00"))
-	currentMatchStyle := lipgloss.NewStyle().Background(lipgloss.Color("#FF9800")).Foreground(lipgloss.Color("#000000"))
+	currentMatchStyle := lipgloss.NewStyle().Background(colorWarning).Foreground(lipgloss.Color("#000000"))
 
 	var sb strings.Builder
 	for i, line := range lines {
@@ -1394,16 +1416,16 @@ func (m DetailModel) stickyStatus() string {
 	var icon string
 	switch {
 	case code >= 200 && code < 300:
-		clr = lipgloss.Color("#4CAF50")
+		clr = colorSuccess
 		icon = "✓"
 	case code >= 300 && code < 400:
 		clr = lipgloss.Color("#FFFF00")
 		icon = "→"
 	case code >= 400 && code < 500:
-		clr = lipgloss.Color("#FF9800")
+		clr = colorWarning
 		icon = "✗"
 	default:
-		clr = lipgloss.Color("#F44336")
+		clr = colorError
 		icon = "✗"
 	}
 	status := lipgloss.NewStyle().Foreground(clr).Bold(true).Render(fmt.Sprintf("%s %d %s", icon, code, resp.Status))
@@ -1467,7 +1489,7 @@ func (m DetailModel) timingPreviewStr() string {
 
 func (m DetailModel) historyView() string {
 	var sb strings.Builder
-	sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#CDD6F4")).Bold(true).Render("Response History"))
+	sb.WriteString(lipgloss.NewStyle().Foreground(colorText).Bold(true).Render("Response History"))
 	sb.WriteString("\n\n")
 	if len(m.historyEntries) == 0 {
 		sb.WriteString(dimStyle.Render("(no history for this request)"))
@@ -1481,9 +1503,9 @@ func (m DetailModel) historyView() string {
 		}
 		line := fmt.Sprintf("%s%s  [%s]", ts, status, e.Environment)
 		if m.diffMode && i == m.diffIdxA {
-			line = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF9800")).Render("A " + line)
+			line = lipgloss.NewStyle().Foreground(colorWarning).Render("A " + line)
 		} else if i == m.historyIdx {
-			line = lipgloss.NewStyle().Background(lipgloss.Color("#3D3D5C")).Foreground(lipgloss.Color("#FFFFFF")).Render(line)
+			line = lipgloss.NewStyle().Background(colorSelBg).Foreground(colorSelFg).Render(line)
 		}
 		sb.WriteString(line + "\n")
 	}
@@ -1510,18 +1532,67 @@ func formatBodyPlain(resp *model.Response) string {
 }
 
 func formatBody(resp *model.Response, maxWidth int) string {
-	if len(resp.Body) == 0 {
-		return ""
-	}
-	ct := strings.ToLower(resp.ContentType)
+	return colorizeBody(string(resp.Body), resp.ContentType)
+}
+
+type bodyFormat int
+
+const (
+	formatPlain bodyFormat = iota
+	formatJSON
+	formatXML
+)
+
+// detectFormat picks a rendering format from the Content-Type, falling back to
+// sniffing the first bytes. HTML is intentionally treated as plain because the
+// XML tokenizer garbles real-world HTML (void/unclosed tags, entities).
+func detectFormat(contentType, body string) bodyFormat {
+	ct := strings.ToLower(contentType)
 	switch {
 	case strings.Contains(ct, "json"):
-		return string(pretty.Color(pretty.Pretty(resp.Body), nil))
-	case strings.Contains(ct, "xml"), strings.Contains(ct, "html"):
-		return indentXML(string(resp.Body))
-	default:
-		return string(resp.Body)
+		return formatJSON
+	case strings.Contains(ct, "xml"):
+		return formatXML
+	case ct != "":
+		return formatPlain
 	}
+	trimmed := strings.TrimSpace(body)
+	switch {
+	case strings.HasPrefix(trimmed, "{"), strings.HasPrefix(trimmed, "["):
+		return formatJSON
+	case strings.HasPrefix(trimmed, "<?xml"):
+		return formatXML
+	}
+	return formatPlain
+}
+
+// colorizeBody pretty-prints and syntax-colors a JSON or XML body. Invalid JSON
+// (e.g. an unresolved {{var}} template in a request) is returned unchanged so it
+// is not mangled.
+func colorizeBody(body, contentType string) string {
+	if body == "" {
+		return ""
+	}
+	switch detectFormat(contentType, body) {
+	case formatJSON:
+		if gjson.Valid(body) {
+			return string(pretty.Color(pretty.Pretty([]byte(body)), nil))
+		}
+		return body
+	case formatXML:
+		return indentXML(body)
+	default:
+		return body
+	}
+}
+
+func requestContentType(req *model.Request) string {
+	for _, h := range req.Headers {
+		if strings.EqualFold(h.Key, "Content-Type") {
+			return h.Value
+		}
+	}
+	return ""
 }
 
 func indentXML(s string) string {
@@ -1529,7 +1600,7 @@ func indentXML(s string) string {
 	var sb strings.Builder
 	depth := 0
 	tagStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F38BA8"))
-	attrKeyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#89DCEB"))
+	attrKeyStyle := lipgloss.NewStyle().Foreground(colorKey)
 	attrValStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#A6E3A1"))
 	for {
 		tok, err := decoder.Token()

@@ -9,6 +9,15 @@ var (
 	colorStatusText   = lipgloss.Color("#CDD6F4")
 	colorDim          = lipgloss.Color("#6C7086")
 
+	colorText    = lipgloss.Color("#CDD6F4")
+	colorSelBg   = lipgloss.Color("#3D3D5C")
+	colorSelFg   = lipgloss.Color("#FFFFFF")
+	colorLineNum = lipgloss.Color("#585858")
+	colorKey     = lipgloss.Color("#89DCEB")
+	colorSuccess = lipgloss.Color("#4CAF50")
+	colorWarning = lipgloss.Color("#FF9800")
+	colorError   = lipgloss.Color("#F44336")
+
 	paneStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(colorBorder)

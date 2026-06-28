@@ -32,7 +32,7 @@ type accordionResult struct {
 
 // renderAccordionSections renders a list of sections as a unified scrollable accordion.
 func renderAccordionSections(sections []accordionSection, width int) accordionResult {
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#CDD6F4"))
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(colorText)
 	numStyle := lipgloss.NewStyle().Foreground(colorBorderActive)
 	divider := dimStyle.Render(strings.Repeat("─", max(width-6, 10)))
 
@@ -131,7 +131,7 @@ func previewLines(content string, n, maxWidth int) string {
 // formatRequestHeaders returns request headers as indented text.
 func formatRequestHeaders(headers []struct{ Key, Value string }) string {
 	var sb strings.Builder
-	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#89DCEB"))
+	keyStyle := lipgloss.NewStyle().Foreground(colorKey)
 	for _, h := range headers {
 		sb.WriteString(fmt.Sprintf("  %s: %s\n", keyStyle.Render(h.Key), h.Value))
 	}

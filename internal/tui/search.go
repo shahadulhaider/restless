@@ -124,7 +124,7 @@ func (m SearchModel) Update(msg tea.Msg) (SearchModel, tea.Cmd) {
 func (m SearchModel) View() string {
 	var sb strings.Builder
 	inputLine := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#CDD6F4")).
+		Foreground(colorText).
 		Render("/ " + m.input + "█")
 	sb.WriteString(inputLine + "\n\n")
 
@@ -135,8 +135,8 @@ func (m SearchModel) View() string {
 			r.File)
 		if i == m.cursor {
 			line = lipgloss.NewStyle().
-				Background(lipgloss.Color("#3D3D5C")).
-				Foreground(lipgloss.Color("#FFFFFF")).
+				Background(colorSelBg).
+				Foreground(colorSelFg).
 				Render(line)
 		}
 		sb.WriteString(line + "\n")

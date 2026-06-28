@@ -1609,50 +1609,6 @@ func timingView(resp *model.Response) string {
 
 // --- Utility ---
 
-func wrapLines(lines []string, maxWidth int) []string {
-	if maxWidth <= 0 {
-		return lines
-	}
-	var wrapped []string
-	for _, line := range lines {
-		plain := stripANSI(line)
-		if len(plain) <= maxWidth {
-			wrapped = append(wrapped, line)
-			continue
-		}
-		// For lines with ANSI codes, wrap the plain text and discard styling
-		// (wrapping styled text while preserving escape codes is complex;
-		// plain text wrap is correct for search/copy and readable for display)
-		for len(plain) > maxWidth {
-			wrapped = append(wrapped, plain[:maxWidth])
-			plain = plain[maxWidth:]
-		}
-		if len(plain) > 0 {
-			wrapped = append(wrapped, plain)
-		}
-	}
-	return wrapped
-}
-
-func stripANSI(s string) string {
-	var sb strings.Builder
-	inEsc := false
-	for _, r := range s {
-		if inEsc {
-			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
-				inEsc = false
-			}
-			continue
-		}
-		if r == '\033' {
-			inEsc = true
-			continue
-		}
-		sb.WriteRune(r)
-	}
-	return sb.String()
-}
-
 func highlightLine(line, query string, style lipgloss.Style) string {
 	if query == "" {
 		return line

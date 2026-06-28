@@ -84,6 +84,11 @@ func (m SearchModel) Update(msg tea.Msg) (SearchModel, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
+	case tea.PasteMsg:
+		m.input += sanitizeInline(msg.Content)
+		m.results = m.filter(m.input)
+		m.cursor = 0
+
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "backspace":

@@ -200,6 +200,15 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 		m.historyIdx = 0
 		m.diffMode = false
 
+	case tea.PasteMsg:
+		if m.searching {
+			m.searchQuery += sanitizeInline(msg.Content)
+			m.rebuildSearchHits()
+		} else if m.jumpingPath {
+			m.jumpQuery += sanitizeInline(msg.Content)
+		}
+		return m, nil
+
 	case responseReceived:
 		m.sending = false
 		if msg.err != nil {

@@ -29,8 +29,11 @@ func NewPromptModel(label string, context interface{}) PromptModel {
 func (m PromptModel) Init() tea.Cmd { return nil }
 
 func (m PromptModel) Update(msg tea.Msg) (PromptModel, tea.Cmd) {
-	if kp, ok := msg.(tea.KeyPressMsg); ok {
-		switch kp.String() {
+	switch msg := msg.(type) {
+	case tea.PasteMsg:
+		m.value += sanitizeInline(msg.Content)
+	case tea.KeyPressMsg:
+		switch msg.String() {
 		case "enter":
 			val := strings.TrimSpace(m.value)
 			return m, func() tea.Msg {
@@ -46,7 +49,7 @@ func (m PromptModel) Update(msg tea.Msg) (PromptModel, tea.Cmd) {
 				m.value = m.value[:len(m.value)-size]
 			}
 		default:
-			if k := kp.String(); len([]rune(k)) == 1 {
+			if k := msg.String(); len([]rune(k)) == 1 {
 				m.value += k
 			}
 		}

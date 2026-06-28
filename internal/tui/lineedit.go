@@ -32,6 +32,22 @@ func (l *lineEdit) Insert(r rune) {
 	l.pos++
 }
 
+// InsertString inserts each rune of s at the cursor position, left to right.
+func (l *lineEdit) InsertString(s string) {
+	for _, r := range s {
+		l.Insert(r)
+	}
+}
+
+// InsertStringFiltered inserts each rune of s that satisfies filter.
+func (l *lineEdit) InsertStringFiltered(s string, filter func(rune) bool) {
+	for _, r := range s {
+		if filter(r) {
+			l.Insert(r)
+		}
+	}
+}
+
 // Backspace deletes the rune before the cursor.
 func (l *lineEdit) Backspace() {
 	if l.pos == 0 {

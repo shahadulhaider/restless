@@ -353,6 +353,28 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.detail, cmd = m.detail.Update(msg)
 		return m, cmd
 
+	case tea.PasteMsg:
+		// Route bracketed-paste only to surfaces that capture text input.
+		switch {
+		case m.showEditor:
+			var cmd tea.Cmd
+			m.editor, cmd = m.editor.Update(msg)
+			return m, cmd
+		case m.showSearch:
+			var cmd tea.Cmd
+			m.search, cmd = m.search.Update(msg)
+			return m, cmd
+		case m.showPrompt:
+			var cmd tea.Cmd
+			m.prompt, cmd = m.prompt.Update(msg)
+			return m, cmd
+		case m.focus == PaneDetail && m.detail.InputActive():
+			var cmd tea.Cmd
+			m.detail, cmd = m.detail.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+
 	case tea.KeyPressMsg:
 		if m.anyOverlayActive() {
 			if m.showHelp {

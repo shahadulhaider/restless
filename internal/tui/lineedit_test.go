@@ -115,6 +115,22 @@ func TestLineEditView(t *testing.T) {
 	assert.Equal(t, "a█bc", l.View(true)) // cursor in middle
 }
 
+func TestLineEditInsertString(t *testing.T) {
+	l := newLineEdit("ad")
+	l.Home()
+	l.Right()
+	l.InsertString("bc")
+	assert.Equal(t, "abcd", l.String())
+	assert.Equal(t, 3, l.pos)
+}
+
+func TestLineEditInsertStringFiltered(t *testing.T) {
+	l := newLineEdit("")
+	l.InsertStringFiltered("a1b2c3", isDigit)
+	assert.Equal(t, "123", l.String())
+	assert.Equal(t, 3, l.pos)
+}
+
 func TestLineEditHandleKey(t *testing.T) {
 	l := newLineEdit("")
 	l.HandleKey("h")

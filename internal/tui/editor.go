@@ -197,6 +197,9 @@ func (m EditorModel) Update(msg tea.Msg) (EditorModel, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
+	case tea.PasteMsg:
+		return m.handlePaste(msg.Content), nil
+
 	case tea.KeyPressMsg:
 		key := msg.String()
 
@@ -379,6 +382,57 @@ func (m EditorModel) handleBody(key string) EditorModel {
 	default:
 		m.body[m.bodyCursor].HandleKey(key)
 	}
+	return m
+}
+
+func (m EditorModel) handlePaste(content string) EditorModel {
+	if content == "" {
+		return m
+	}
+	if m.focus == fieldBody {
+		return m.handleBodyPaste(content)
+	}
+	le := m.currentLineEdit()
+	if le == nil {
+		return m
+	}
+	if m.focus == fieldTimeout {
+		le.InsertStringFiltered(sanitizeInline(content), isDigit)
+	} else {
+		le.InsertString(sanitizeInline(content))
+	}
+	return m
+}
+
+// handleBodyPaste splices possibly-multi-line pasted text into the body at the
+// cursor, splitting on newlines into new body lines (mirrors Enter handling).
+func (m EditorModel) handleBodyPaste(content string) EditorModel {
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	content = strings.ReplaceAll(content, "\r", "\n")
+	parts := strings.Split(content, "\n")
+
+	cur := &m.body[m.bodyCursor]
+	if len(parts) == 1 {
+		cur.InsertString(parts[0])
+		return m
+	}
+
+	before := append([]rune{}, cur.text[:cur.pos]...)
+	after := append([]rune{}, cur.text[cur.pos:]...)
+
+	newLines := make([]lineEdit, 0, len(parts))
+	newLines = append(newLines, newLineEdit(string(before)+parts[0]))
+	for i := 1; i < len(parts); i++ {
+		newLines = append(newLines, newLineEdit(parts[i]))
+	}
+	last := &newLines[len(newLines)-1]
+	last.pos = last.Len()
+	last.text = append(last.text, after...)
+
+	tail := append([]lineEdit{}, m.body[m.bodyCursor+1:]...)
+	m.body = append(m.body[:m.bodyCursor], newLines...)
+	m.body = append(m.body, tail...)
+	m.bodyCursor += len(newLines) - 1
 	return m
 }
 

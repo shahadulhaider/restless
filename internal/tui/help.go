@@ -124,6 +124,7 @@ func fullKeybindingReference() string {
 		{"Click", "Focus a pane; select a request; expand a file/folder"},
 		{"Click [r]/[s]", "Switch Request / Response view"},
 		{"Click header", "Fold/unfold an accordion section"},
+		{"Click ▾/▸ line", "Fold/unfold the JSON node on that line"},
 		{"Drag divider", "Resize the browser / detail split"},
 	})
 

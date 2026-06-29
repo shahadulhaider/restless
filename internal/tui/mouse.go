@@ -115,6 +115,17 @@ func (m App) handleZoneClick(msg tea.MouseClickMsg) (App, tea.Cmd, bool) {
 			return m, nil, true
 		}
 	}
+	for j := range lastFold.jsonFolds {
+		if z := zone.Get(fmt.Sprintf("fold:%d", j)); z != nil && z.InBounds(msg) {
+			m.focus = PaneDetail
+			if cm := m.detail.collapsedFor(); cm[j] {
+				delete(cm, j)
+			} else {
+				cm[j] = true
+			}
+			return m, nil, true
+		}
+	}
 	return m, nil, false
 }
 

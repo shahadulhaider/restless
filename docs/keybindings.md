@@ -29,6 +29,7 @@ Mouse support is always on. Hold `Option`/`Shift` for your terminal's native tex
 | Click | Focus a pane; select a request; expand a file/folder |
 | Click `[r]`/`[s]` | Switch Request / Response view |
 | Click a section header | Fold / unfold that accordion section |
+| Click a JSON node (`▾`/`▸`) | Fold / unfold that object or array |
 | Drag the pane divider | Resize the browser / detail split |
 
 ## Browser Pane
@@ -50,7 +51,7 @@ Mouse support is always on. Hold `Option`/`Shift` for your terminal's native tex
 | `Enter` / `Ctrl+R` | Send request |
 | `Space` | Toggle fold on section under cursor |
 | `1` / `2` / `3` | Toggle Body / Headers / Timing section |
-| `za` | Fold / unfold the JSON object or array under the cursor |
+| `za` | Fold / unfold the JSON object or array under the cursor (marked `▾`/`▸`) |
 | `zo` / `zc` | Expand / collapse section under cursor |
 | `zR` | Expand all sections and JSON nodes |
 | `zM` | Collapse all sections |
@@ -66,7 +67,7 @@ Mouse support is always on. Hold `Option`/`Shift` for your terminal's native tex
 
 ## Visual Selection
 
-Press `v` in the detail pane for character-level selection.
+Press `v` in the detail pane for character-level selection. A block cursor marks the active position.
 
 | Key | Action |
 |-----|--------|

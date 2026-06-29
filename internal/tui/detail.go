@@ -1133,6 +1133,48 @@ func foldSummary(lines []string, openFull, closeFull int) string {
 	return opener + dimStyle.Render(fmt.Sprintf(" … %s (%d lines)", bracket, closeFull-openFull-1))
 }
 
+// withFoldMarker swaps a body line's leading indent for a gutter glyph so
+// foldable JSON nodes are discoverable (▾ expanded, ▸ collapsed).
+func withFoldMarker(line string, collapsed bool) string {
+	glyph := "▾"
+	if collapsed {
+		glyph = "▸"
+	}
+	marker := lipgloss.NewStyle().Foreground(colorBorderActive).Render(glyph)
+	if strings.HasPrefix(line, "  ") {
+		return marker + " " + line[2:]
+	}
+	return marker + " " + line
+}
+
+// renderCursorLine draws the visual-mode cursor line: the selection span is
+// highlighted and a block cursor marks the active column, so the moving end of
+// the selection is visible.
+func (m DetailModel) renderCursorLine(runes []rune, a, b int, sel bool) string {
+	selStyle := lipgloss.NewStyle().Background(colorSelBg).Foreground(colorSelFg)
+	curStyle := lipgloss.NewStyle().Background(colorText).Foreground(colorStatusBar)
+	col := m.selectCol
+	if col > len(runes) {
+		col = len(runes)
+	}
+	var sb strings.Builder
+	for i := 0; i < len(runes); i++ {
+		ch := string(runes[i])
+		switch {
+		case i == col:
+			sb.WriteString(curStyle.Render(ch))
+		case sel && i >= a && i < b:
+			sb.WriteString(selStyle.Render(ch))
+		default:
+			sb.WriteString(ch)
+		}
+	}
+	if col >= len(runes) {
+		sb.WriteString(curStyle.Render(" "))
+	}
+	return sb.String()
+}
+
 // scrollBy advances the offset by n lines, skipping JSON lines hidden inside
 // collapsed folds (using the layout from the last render).
 func (m *DetailModel) scrollBy(n int) {
@@ -1273,8 +1315,14 @@ func (m DetailModel) View() string {
 		}
 		for _, full := range vis[cur:endIdx] {
 			if j := full - lastFold.bodyStart; j >= 0 {
-				if c, ok := lastFold.jsonFolds[j]; ok && collapsed[j] {
-					sb.WriteString(foldSummary(lines, full, lastFold.bodyStart+c) + "\n")
+				if c, ok := lastFold.jsonFolds[j]; ok {
+					var line string
+					if collapsed[j] {
+						line = withFoldMarker(foldSummary(lines, full, lastFold.bodyStart+c), true)
+					} else {
+						line = withFoldMarker(lines[full], false)
+					}
+					sb.WriteString(zone.Mark(fmt.Sprintf("fold:%d", j), line) + "\n")
 					continue
 				}
 			}
@@ -1311,7 +1359,12 @@ func (m DetailModel) View() string {
 			lineIdx := off + i
 			if m.selecting {
 				runes := []rune(stripANSI(l))
-				if a, b, ok := m.lineSelCols(lineIdx, len(runes)); ok {
+				a, b, sel := m.lineSelCols(lineIdx, len(runes))
+				if lineIdx == m.selectCursor {
+					sb.WriteString(m.renderCursorLine(runes, a, b, sel) + "\n")
+					continue
+				}
+				if sel {
 					sb.WriteString(string(runes[:a]) + selectStyle.Render(string(runes[a:b])) + string(runes[b:]) + "\n")
 					continue
 				}

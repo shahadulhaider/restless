@@ -100,6 +100,10 @@ type DetailModel struct {
 	jumpingPath bool
 	jumpQuery   string
 
+	// Structural JSON folding: collapsed node openers keyed by JSON-line index.
+	respCollapsed map[int]bool
+	reqCollapsed  map[int]bool
+
 	// g-prefix (for gp)
 	pendingG bool
 }
@@ -123,15 +127,17 @@ var lastSectionLines []sectionRange
 
 func NewDetailModel(rootDir string, chainCtx *parser.ChainContext, cookies *engine.CookieManager) DetailModel {
 	return DetailModel{
-		rootDir:      rootDir,
-		chainCtx:     chainCtx,
-		cookies:      cookies,
-		envVars:      make(map[string]string),
-		showLineNums: true,
-		prettyPrint:  true,
-		mode:         modeRequest,
-		reqFolds:     [4]bool{true, false, false, false}, // body expanded
-		respFolds:    [4]bool{true, false, false, false}, // body expanded
+		rootDir:       rootDir,
+		chainCtx:      chainCtx,
+		cookies:       cookies,
+		envVars:       make(map[string]string),
+		showLineNums:  true,
+		prettyPrint:   true,
+		mode:          modeRequest,
+		reqFolds:      [4]bool{true, false, false, false}, // body expanded
+		respFolds:     [4]bool{true, false, false, false}, // body expanded
+		respCollapsed: make(map[int]bool),
+		reqCollapsed:  make(map[int]bool),
 	}
 }
 
@@ -210,6 +216,8 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 		m.reqFolds = [4]bool{true, false, false, false}
 		m.respFolds = [4]bool{true, false, false, false}
 		m.expandAll = false
+		m.reqCollapsed = make(map[int]bool)
+		m.respCollapsed = make(map[int]bool)
 
 	case historyLoadedMsg:
 		m.historyEntries = msg.entries
@@ -243,6 +251,7 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 			m.respFolds = [4]bool{true, false, false, false}
 		}
 		m.expandAll = false
+		m.respCollapsed = make(map[int]bool)
 		m.clearSearch()
 
 	case tea.KeyPressMsg:
@@ -586,6 +595,8 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 		cur := m.sectionAtOffset()
 		folds := m.folds()
 		switch key {
+		case "a":
+			m.toggleFoldAtCursor()
 		case "o":
 			m.expandSection(cur)
 		case "c":
@@ -596,6 +607,7 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 		case "R":
 			*folds = [4]bool{true, true, true, true}
 			m.expandAll = true
+			m.clearCollapsed()
 		}
 		return m, nil
 	}
@@ -734,33 +746,33 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 
 	// Scrolling
 	case "j", "down":
-		m.setOffset(m.offset() + 1)
+		m.scrollBy(1)
 	case "k", "up":
-		if m.offset() > 0 {
-			m.setOffset(m.offset() - 1)
-		}
+		m.scrollBy(-1)
 	case "ctrl+d":
-		m.setOffset(m.offset() + m.viewableHeight()/2)
+		m.scrollBy(m.viewableHeight() / 2)
 	case "ctrl+u":
-		off := m.offset() - m.viewableHeight()/2
-		if off < 0 {
-			off = 0
-		}
-		m.setOffset(off)
+		m.scrollBy(-m.viewableHeight() / 2)
 	case "g":
 		m.pendingG = true
 		return m, nil
 	case "G":
-		m.setOffset(999999)
+		if lastFold.bodyStart >= 0 && len(lastFold.visible) > 0 {
+			m.setOffset(lastFold.visible[len(lastFold.visible)-1])
+		} else {
+			m.setOffset(999999)
+		}
 
 	// Body controls
 	case "w":
 		m.wordWrap = !m.wordWrap
+		m.clearCollapsed()
 		m.setOffset(0)
 	case "l":
 		m.showLineNums = !m.showLineNums
 	case "p":
 		m.prettyPrint = !m.prettyPrint
+		m.clearCollapsed()
 		m.setOffset(0)
 	case "f":
 		m.searching = true
@@ -1055,6 +1067,118 @@ func (m DetailModel) currentAccordionContent() string {
 	return m.buildResponseAccordion().content
 }
 
+// lastFold holds the fold layout from the most recent render so value-receiver
+// scroll/toggle handlers can navigate visible lines (same pattern as the
+// package-level section ranges).
+var lastFold foldState
+
+func (m DetailModel) collapsedFor() map[int]bool {
+	if m.mode == modeRequest {
+		return m.reqCollapsed
+	}
+	return m.respCollapsed
+}
+
+// computeFoldState builds the fold layout for the current body, or a disabled
+// state (bodyStart -1) when folding does not apply (non-JSON, wrap/select/search
+// mode, collapsed body section, oversized or invalid body).
+func (m DetailModel) computeFoldState(result accordionResult, total int) foldState {
+	fs := foldState{bodyStart: -1}
+	if m.wordWrap || m.selecting || m.searching {
+		return fs
+	}
+	sectionFolds := m.respFolds
+	if m.mode == modeRequest {
+		sectionFolds = m.reqFolds
+	}
+	if !sectionFolds[0] {
+		return fs
+	}
+	var body, ct string
+	if m.mode == modeResponse && m.response != nil {
+		body, ct = string(m.response.Body), m.response.ContentType
+	} else if m.mode == modeRequest && m.request != nil {
+		body, ct = m.request.Body, requestContentType(m.request)
+	}
+	if body == "" || len(body) > maxBodyDisplay || detectFormat(ct, body) != formatJSON || !gjson.Valid(body) {
+		return fs
+	}
+	jf := jsonFolds(string(pretty.Pretty([]byte(body))))
+	if len(jf) == 0 {
+		return fs
+	}
+	bodyStart := -1
+	for _, sr := range result.ranges {
+		if sr.sec == sectionBody {
+			bodyStart = sr.start + 1
+			break
+		}
+	}
+	if bodyStart < 0 {
+		return fs
+	}
+	fs.bodyStart, fs.jsonFolds = bodyStart, jf
+	fs.visible = buildVisible(total, bodyStart, jf, m.collapsedFor())
+	return fs
+}
+
+func foldSummary(lines []string, openFull, closeFull int) string {
+	opener := strings.TrimRight(lines[openFull], " ")
+	bracket := "}"
+	if closeFull >= 0 && closeFull < len(lines) {
+		if strings.HasPrefix(strings.TrimSpace(stripANSI(lines[closeFull])), "]") {
+			bracket = "]"
+		}
+	}
+	return opener + dimStyle.Render(fmt.Sprintf(" … %s (%d lines)", bracket, closeFull-openFull-1))
+}
+
+// scrollBy advances the offset by n lines, skipping JSON lines hidden inside
+// collapsed folds (using the layout from the last render).
+func (m *DetailModel) scrollBy(n int) {
+	vis := lastFold.visible
+	if lastFold.bodyStart < 0 || len(vis) == 0 {
+		off := m.offset() + n
+		if off < 0 {
+			off = 0
+		}
+		m.setOffset(off)
+		return
+	}
+	cur := visIndexOf(vis, m.offset()) + n
+	if cur < 0 {
+		cur = 0
+	}
+	if cur > len(vis)-1 {
+		cur = len(vis) - 1
+	}
+	m.setOffset(vis[cur])
+}
+
+func (m *DetailModel) toggleFoldAtCursor() {
+	if lastFold.bodyStart < 0 {
+		return
+	}
+	j := m.offset() - lastFold.bodyStart
+	if _, ok := lastFold.jsonFolds[j]; !ok {
+		return
+	}
+	cm := m.collapsedFor()
+	if cm[j] {
+		delete(cm, j)
+	} else {
+		cm[j] = true
+	}
+}
+
+func (m *DetailModel) clearCollapsed() {
+	if m.mode == modeRequest {
+		m.reqCollapsed = make(map[int]bool)
+	} else {
+		m.respCollapsed = make(map[int]bool)
+	}
+}
+
 // --- View ---
 
 func (m DetailModel) View() string {
@@ -1121,52 +1245,89 @@ func (m DetailModel) View() string {
 
 	lines := strings.Split(result.content, "\n")
 	off := m.offset()
-
-	// Clamp
-	maxOff := len(lines) - m.viewableHeight()
-	if maxOff < 0 {
-		maxOff = 0
-	}
-	if off > maxOff {
-		off = maxOff
-	}
-	if off < 0 {
-		off = 0
-	}
-	m.setOffset(off)
-
-	end := off + m.viewableHeight()
-	if end > len(lines) {
-		end = len(lines)
-	}
+	vh := m.viewableHeight()
+	lastFold = m.computeFoldState(result, len(lines))
 
 	selectStyle := lipgloss.NewStyle().Background(colorSelBg).Foreground(colorSelFg)
 	headerKey := make(map[int]string, len(result.ranges))
 	for _, sr := range result.ranges {
 		headerKey[sr.start] = fmt.Sprintf("%d", int(sr.sec)+1)
 	}
-	for i, l := range lines[off:end] {
-		lineIdx := off + i
-		if m.selecting {
-			runes := []rune(stripANSI(l))
-			if a, b, ok := m.lineSelCols(lineIdx, len(runes)); ok {
-				sb.WriteString(string(runes[:a]) + selectStyle.Render(string(runes[a:b])) + string(runes[b:]) + "\n")
-				continue
-			}
-		}
-		if key, ok := headerKey[lineIdx]; ok {
-			l = zone.Mark("dt:sec:"+key, l)
-		}
-		sb.WriteString(l + "\n")
-	}
 
-	// Scroll indicator
-	if len(lines) > m.viewableHeight() {
-		pct := 0
-		if maxOff > 0 {
-			pct = off * 100 / maxOff
+	if lastFold.bodyStart >= 0 {
+		vis := lastFold.visible
+		collapsed := m.collapsedFor()
+		cur := visIndexOf(vis, off)
+		maxIdx := len(vis) - vh
+		if maxIdx < 0 {
+			maxIdx = 0
 		}
-		sb.WriteString(dimStyle.Render(fmt.Sprintf("── %d%% (%d/%d) ──", pct, off+1, len(lines))))
+		if cur > maxIdx {
+			cur = maxIdx
+		}
+		off = vis[cur]
+		m.setOffset(off)
+		endIdx := cur + vh
+		if endIdx > len(vis) {
+			endIdx = len(vis)
+		}
+		for _, full := range vis[cur:endIdx] {
+			if j := full - lastFold.bodyStart; j >= 0 {
+				if c, ok := lastFold.jsonFolds[j]; ok && collapsed[j] {
+					sb.WriteString(foldSummary(lines, full, lastFold.bodyStart+c) + "\n")
+					continue
+				}
+			}
+			l := lines[full]
+			if key, ok := headerKey[full]; ok {
+				l = zone.Mark("dt:sec:"+key, l)
+			}
+			sb.WriteString(l + "\n")
+		}
+		if len(vis) > vh {
+			pct := 0
+			if maxIdx > 0 {
+				pct = cur * 100 / maxIdx
+			}
+			sb.WriteString(dimStyle.Render(fmt.Sprintf("── %d%% (%d/%d) ──", pct, cur+1, len(vis))))
+		}
+	} else {
+		maxOff := len(lines) - vh
+		if maxOff < 0 {
+			maxOff = 0
+		}
+		if off > maxOff {
+			off = maxOff
+		}
+		if off < 0 {
+			off = 0
+		}
+		m.setOffset(off)
+		end := off + vh
+		if end > len(lines) {
+			end = len(lines)
+		}
+		for i, l := range lines[off:end] {
+			lineIdx := off + i
+			if m.selecting {
+				runes := []rune(stripANSI(l))
+				if a, b, ok := m.lineSelCols(lineIdx, len(runes)); ok {
+					sb.WriteString(string(runes[:a]) + selectStyle.Render(string(runes[a:b])) + string(runes[b:]) + "\n")
+					continue
+				}
+			}
+			if key, ok := headerKey[lineIdx]; ok {
+				l = zone.Mark("dt:sec:"+key, l)
+			}
+			sb.WriteString(l + "\n")
+		}
+		if len(lines) > vh {
+			pct := 0
+			if maxOff > 0 {
+				pct = off * 100 / maxOff
+			}
+			sb.WriteString(dimStyle.Render(fmt.Sprintf("── %d%% (%d/%d) ──", pct, off+1, len(lines))))
+		}
 	}
 
 	// Overlays

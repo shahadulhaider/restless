@@ -637,9 +637,9 @@ func (m App) View() tea.View {
 		case m.focus == PaneDetail:
 			if m.detail.response != nil {
 				if m.detail.mode == modeResponse {
-					statusLine = " [r]req [s]resp │ 1/2/3:fold │ v:select │ y:yank(b/h/a/c/l/p/v/i) │ gp:path │ f:find │ Enter:send"
+					statusLine = " [r]req [s]resp │ 1/2/3:sec za:fold │ v:select │ y:yank │ gp:path │ f:find │ Enter:send"
 				} else {
-					statusLine = " [r]req [s]resp │ 1/2/3:fold │ v:select │ y:yank(b/h/a/c/l/p/v/i) │ gp:path │ Enter:send"
+					statusLine = " [r]req [s]resp │ 1/2/3:sec za:fold │ v:select │ y:yank │ gp:path │ Enter:send"
 				}
 			} else {
 				statusLine = " Enter:send │ e:edit │ q:quit"

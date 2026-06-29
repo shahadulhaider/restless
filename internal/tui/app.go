@@ -650,6 +650,10 @@ func (m App) View() tea.View {
 	}
 	statusBar := statusBarStyle.Width(m.width).Render(statusLine)
 
+	// Keep the status bar on-screen: lipgloss Height pads short content but does
+	// not truncate overflow, so a tall pane would otherwise push the status bar
+	// past the bottom row. Clamp the panes to leave its row free.
+	mainContent = clampHeight(mainContent, m.height-1)
 	content := lipgloss.JoinVertical(lipgloss.Left, mainContent, statusBar)
 
 	if m.showEditor {
@@ -688,6 +692,17 @@ func (m App) View() tea.View {
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
 	return v
+}
+
+func clampHeight(s string, maxLines int) string {
+	if maxLines < 0 {
+		maxLines = 0
+	}
+	lines := strings.Split(s, "\n")
+	if len(lines) <= maxLines {
+		return s
+	}
+	return strings.Join(lines[:maxLines], "\n")
 }
 
 func RunApp(rootDir string) error {

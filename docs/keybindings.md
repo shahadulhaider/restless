@@ -19,6 +19,18 @@ Press `F1` for context-sensitive help.
 | `F1` | Context-sensitive help |
 | `q` / `Ctrl+C` | Quit |
 
+## Mouse
+
+Mouse support is always on. Hold `Option`/`Shift` for your terminal's native text selection.
+
+| Action | Result |
+|--------|--------|
+| Wheel | Scroll the pane under the cursor |
+| Click | Focus a pane; select a request; expand a file/folder |
+| Click `[r]`/`[s]` | Switch Request / Response view |
+| Click a section header | Fold / unfold that accordion section |
+| Drag the pane divider | Resize the browser / detail split |
+
 ## Browser Pane
 
 | Key | Action |
@@ -36,11 +48,11 @@ Press `F1` for context-sensitive help.
 |-----|--------|
 | `r` / `s` | Switch to Request / Response view |
 | `Enter` / `Ctrl+R` | Send request |
-| `Space` | Toggle fold section under cursor |
-| `1` / `2` / `3` | Toggle sections |
-| `zo` | Expand section under cursor |
-| `zc` | Collapse section under cursor |
-| `zR` | Expand all sections |
+| `Space` | Toggle fold on section under cursor |
+| `1` / `2` / `3` | Toggle Body / Headers / Timing section |
+| `za` | Fold / unfold the JSON object or array under the cursor |
+| `zo` / `zc` | Expand / collapse section under cursor |
+| `zR` | Expand all sections and JSON nodes |
 | `zM` | Collapse all sections |
 | `j` / `k` | Scroll line by line |
 | `Ctrl+D` / `Ctrl+U` | Scroll half page |
@@ -50,6 +62,20 @@ Press `F1` for context-sensitive help.
 | `l` | Toggle line numbers |
 | `f` | Search in body |
 | `n` / `N` | Next / previous search match |
+| `gp` | Jump to a JSON path (type the path, then Enter) |
+
+## Visual Selection
+
+Press `v` in the detail pane for character-level selection.
+
+| Key | Action |
+|-----|--------|
+| `v` | Enter visual selection mode |
+| `h` / `l` / `j` / `k` | Move the cursor |
+| `w` / `b` | Move by word |
+| `0` / `$` | Jump to start / end of line |
+| `y` | Copy the exact selection |
+| `Esc` | Cancel |
 
 ## Yank (Copy)
 
@@ -59,7 +85,13 @@ Press `F1` for context-sensitive help.
 | `yh` | Copy headers |
 | `ya` | Copy all (full request or response) |
 | `yc` | Copy as curl |
+| `yl` | Copy the current line |
+| `yp` | Copy the JSON path at the cursor |
+| `yv` | Copy the JSON value at the cursor |
+| `yi` | Copy the individual header or line |
 | `yg` + key | Generate code (see below) |
+
+> Copies use OSC52 in addition to the local clipboard tool, so they work over SSH and tmux.
 
 ## Code Generation (`yg` + key)
 
@@ -88,5 +120,6 @@ Press `F1` for context-sensitive help.
 | `Ctrl+U` | Clear to start |
 | `Ctrl+K` | Clear to end |
 | `Ctrl+D` | Delete char / header row |
+| `Ctrl+V` / `Cmd+V` | Paste (also works in search and prompts) |
 | `Ctrl+S` | Save |
 | `Esc` | Cancel |

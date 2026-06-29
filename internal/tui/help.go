@@ -118,6 +118,15 @@ func fullKeybindingReference() string {
 		{"q / Ctrl+C", "Quit"},
 	})
 
+	sb.WriteString("\n" + section.Render("Mouse") + "\n")
+	writeKeys(&sb, key, [][2]string{
+		{"Wheel", "Scroll the pane under the cursor"},
+		{"Click", "Focus a pane; select a request; expand a file/folder"},
+		{"Click [r]/[s]", "Switch Request / Response view"},
+		{"Click header", "Fold/unfold an accordion section"},
+		{"Drag divider", "Resize the browser / detail split"},
+	})
+
 	sb.WriteString("\n" + section.Render("Browser Pane") + "\n")
 	writeKeys(&sb, key, [][2]string{
 		{"j/k / ↑/↓", "Navigate requests"},
@@ -134,13 +143,13 @@ func fullKeybindingReference() string {
 		{"Enter / Ctrl+R", "Send request"},
 	})
 
-	sb.WriteString("\n" + section.Render("Detail Pane — Sections") + "\n")
+	sb.WriteString("\n" + section.Render("Detail Pane — Folding") + "\n")
 	writeKeys(&sb, key, [][2]string{
-		{"1 / 2 / 3", "Toggle section fold"},
+		{"1 / 2 / 3", "Toggle Body / Headers / Timing section"},
 		{"Space", "Toggle fold on section under cursor"},
-		{"zo", "Expand section under cursor"},
-		{"zc", "Collapse section under cursor"},
-		{"zR", "Expand all sections"},
+		{"za", "Fold/unfold the JSON object/array under the cursor"},
+		{"zo / zc", "Expand / collapse section under cursor"},
+		{"zR", "Expand all sections and JSON nodes"},
 		{"zM", "Collapse all sections"},
 	})
 
@@ -153,10 +162,12 @@ func fullKeybindingReference() string {
 
 	sb.WriteString("\n" + section.Render("Detail Pane — Selection") + "\n")
 	writeKeys(&sb, key, [][2]string{
-		{"v", "Enter visual selection mode"},
-		{"j/k (in visual)", "Extend selection range"},
-		{"y (in visual)", "Copy selected lines to clipboard"},
-		{"Esc (in visual)", "Cancel selection"},
+		{"v", "Enter visual selection mode (character-level)"},
+		{"h/l/j/k", "Move cursor while selecting"},
+		{"w/b", "Move by word while selecting"},
+		{"0/$", "Jump to start/end of line while selecting"},
+		{"y", "Copy the exact selection to clipboard"},
+		{"Esc", "Cancel selection"},
 		{"gp", "Jump to JSON path (type path, Enter to jump)"},
 	})
 
@@ -204,6 +215,7 @@ func fullKeybindingReference() string {
 		{"Ctrl+U", "Clear to start of line"},
 		{"Ctrl+K", "Clear to end of line"},
 		{"Ctrl+D", "Delete header row"},
+		{"Ctrl+V / Cmd+V", "Paste (also works in search and prompts)"},
 		{"Ctrl+S", "Save"},
 		{"Esc", "Cancel"},
 	})
@@ -276,7 +288,7 @@ func contextHelp(ctx string) string {
 			{"yc", "Copy as curl command"},
 			{"yl/yp/yv/yi", "Copy line / JSON path / value / item"},
 			{"yg + key", "Generate code (Python, JS, Go, etc.)"},
-			{"v", "Visual selection mode (j/k to extend, y to copy)"},
+			{"v", "Character-level selection (h/l/j/k/w/b, y to copy)"},
 			{"gp", "Jump to JSON path"},
 		})
 
@@ -289,9 +301,10 @@ func contextHelp(ctx string) string {
 			{"1", "[Body] — response body with JSON/XML formatting"},
 			{"2", "[Headers] — response headers"},
 			{"3", "[Timing] — DNS, TLS, TTFB waterfall"},
-			{"Space", "Toggle fold on section under cursor (Body, Headers, Timing, Assertions)"},
+			{"Space", "Toggle fold on section under cursor"},
+			{"za", "Fold/unfold the JSON object/array under the cursor"},
 			{"zo/zc", "Open/close section (vim fold)"},
-			{"zR/zM", "Expand all / collapse all"},
+			{"zR/zM", "Expand all (incl. JSON nodes) / collapse all sections"},
 		})
 		sb.WriteString("\n" + section.Render("Body Viewer") + "\n")
 		writeKeys(&sb, key, [][2]string{
@@ -311,7 +324,7 @@ func contextHelp(ctx string) string {
 			{"yv", "Copy JSON value at cursor path"},
 			{"yi", "Copy individual header or line"},
 			{"yg + key", "Generate code from the request"},
-			{"v", "Visual selection mode (j/k to extend, y to copy)"},
+			{"v", "Character-level selection (h/l/j/k/w/b, y to copy)"},
 			{"gp", "Jump to JSON path"},
 		})
 
@@ -338,8 +351,9 @@ func contextHelp(ctx string) string {
 			{"Ctrl+K", "Clear from cursor to end"},
 			{"Ctrl+D", "Delete character / delete header row"},
 		})
-		sb.WriteString("\n" + section.Render("Save / Cancel") + "\n")
+		sb.WriteString("\n" + section.Render("Paste / Save / Cancel") + "\n")
 		writeKeys(&sb, key, [][2]string{
+			{"Ctrl+V / Cmd+V", "Paste into the focused field (multi-line into body)"},
 			{"Ctrl+S", "Save and close editor"},
 			{"Esc", "Cancel without saving"},
 		})

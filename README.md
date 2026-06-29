@@ -60,8 +60,10 @@ restless run api.http
 ## Features
 
 - **Interactive TUI** — browse collections, send requests, inspect responses with collapsible accordion view
+- **Mouse support** — wheel-scroll, click to select/focus, click headers to fold, drag the divider to resize
 - **`.http` files** — plain text, Git-friendly, JetBrains-compatible
-- **Request/Response toggle** — `r`/`s` to switch views, both with fold/scroll/search/yank
+- **Request/Response toggle** — `r`/`s` to switch views, both with syntax highlighting, fold/scroll/search/yank
+- **JSON folding** — collapse/expand individual objects and arrays with `za`
 - **Environments** — `restless.env.json` with `$shared` + per-env variables, switch with `Ctrl+E`
 - **Inline variables** — `@baseUrl = http://localhost:8000` right in your `.http` file
 - **Dynamic variables** — `{{$uuid}}`, `{{$timestamp}}`, `{{$randomInt}}`, `{{$date}}`, and more
@@ -71,11 +73,11 @@ restless run api.http
 - **Code generation** — `yg` + key to copy as Python, JavaScript, Go, Java, Ruby, HTTPie, curl, PowerShell
 - **Import from anywhere** — Postman, Insomnia, Bruno, curl commands, OpenAPI/Swagger
 - **$EDITOR integration** — press `e` to edit in nvim/vim/code
-- **Vim-style commands** — `zo`/`zc`/`zR`/`zM` folds, `yb`/`yh`/`ya`/`yc` yank
+- **Vim-style commands** — `za` JSON folds, `zo`/`zc`/`zR`/`zM` section folds, `v` visual selection, `yb`/`yh`/`ya`/`yc` yank
 - **Cookie jar** — cookies persist per environment automatically
 - **Pre-request & post-response scripting** — JavaScript (ES5.1) via `# @pre-request { ... }` and `# @post-response { ... }` with crypto builtins (hmac, sha256, base64)
 - **Proxy & SSL** — `# @insecure`, `# @proxy`, `--insecure`, `--proxy` flags
-- **Readline/emacs editing** — `Ctrl+A/E/W/U/K`, arrow keys, word navigation in editor
+- **Readline/emacs editing** — `Ctrl+A/E/W/U/K`, arrow keys, word navigation, and paste (`Ctrl`/`Cmd`+`V`) in editor, search, and prompts
 
 ## Keyboard Shortcuts
 
@@ -89,6 +91,9 @@ Press `?` in the TUI for the full reference. Press `F1` for context-sensitive he
 | `r/s` | Request / Response view |
 | `1/2/3` | Toggle sections |
 | `Space` | Fold/unfold section |
+| `za` | Fold/unfold JSON node |
+| `v` | Visual selection (character-level) |
+| Mouse | Scroll, click, drag to resize |
 | `yb/yh/ya/yc` | Copy body/headers/all/curl |
 | `yg` + key | Generate code |
 | `p` | Pretty/raw toggle |

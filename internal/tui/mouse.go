@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	zone "github.com/lrstanley/bubblezone/v2"
@@ -109,10 +108,10 @@ func (m App) handleZoneClick(msg tea.MouseClickMsg) (App, tea.Cmd, bool) {
 		}
 		return m, nil, true
 	}
-	for _, key := range []string{"1", "2", "3", "4"} {
-		if z := zone.Get("dt:sec:" + key); z != nil && z.InBounds(msg) {
+	for i := 0; i < 4; i++ {
+		if z := zone.Get(fmt.Sprintf("dt:tab:%d", i)); z != nil && z.InBounds(msg) {
 			m.focus = PaneDetail
-			m.detail.toggleSection(int(key[0] - '1'))
+			m.detail.setActiveTab(i)
 			return m, nil, true
 		}
 	}
@@ -171,11 +170,7 @@ func (m App) handleMouseMotion(msg tea.MouseMotionMsg) (App, tea.Cmd) {
 						m.detail.selectLineMode = false
 						m.detail.selectAnchor = m.detail.cursorLine
 						m.detail.selectAnchorCol = 0
-						raw := strings.Split(m.detail.currentAccordionContent(), "\n")
-						m.detail.selectLines = make([]string, len(raw))
-						for i, l := range raw {
-							m.detail.selectLines[i] = stripANSI(l)
-						}
+					m.detail.selectLines = m.detail.activeTabRawLines()
 					}
 					m.detail.selectCursor = lineIdx
 					m.detail.selectCol = m.detail.selectLineLen(lineIdx)

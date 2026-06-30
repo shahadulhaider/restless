@@ -1,0 +1,71 @@
+:root {
+  --app-bg: #1e1e2e;
+  --app-text: #cdd6f4;
+  --app-surface: #313244;
+  --app-overlay: #45475a;
+  --app-muted: #6c7086;
+  --app-border: #585b70;
+
+  color-scheme: dark;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  background: var(--app-bg);
+  color: var(--app-text);
+  font-size: 14px;
+}
+
+body {
+  min-height: 100dvh;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  --wails-draggable: drag;
+}
+
+#app {
+  display: contents;
+}
+
+input,
+textarea,
+[contenteditable] {
+  -webkit-user-select: text;
+  user-select: text;
+  --wails-draggable: no-drag;
+}
+
+button,
+a,
+select,
+[role="button"] {
+  --wails-draggable: no-drag;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--app-overlay);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--app-muted);
+}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/shahadulhaider/restless/internal/gui"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -27,6 +28,10 @@ func main() {
 		Description: "Your API workbench — desktop edition",
 		Services: []application.Service{
 			application.NewService(&GreetService{rootDir: abs}),
+			application.NewService(&gui.EnvironmentService{}),
+			application.NewService(&gui.ExporterService{}),
+			application.NewService(&gui.ImporterService{}),
+			application.NewService(&gui.HistoryService{}),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

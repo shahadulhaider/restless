@@ -6,10 +6,12 @@ import * as EnvironmentService from "./environmentservice.js";
 import * as ExporterService from "./exporterservice.js";
 import * as HistoryService from "./historyservice.js";
 import * as ImporterService from "./importerservice.js";
+import * as RequestService from "./requestservice.js";
 export {
     CollectionService,
     EnvironmentService,
     ExporterService,
     HistoryService,
-    ImporterService
+    ImporterService,
+    RequestService
 };

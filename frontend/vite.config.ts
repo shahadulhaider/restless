@@ -9,5 +9,9 @@ export default defineConfig({
     port: Number(process.env.WAILS_VITE_PORT) || 9245,
     strictPort: true,
   },
+  build: {
+    outDir: "../cmd/restless-app/dist",
+    emptyOutDir: true,
+  },
   plugins: [vue(), wails("./bindings")],
 });

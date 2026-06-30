@@ -1,0 +1,50 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: restless-app
+    main: ./cmd/restless-app
+    binary: restless-app
+    ldflags:
+      - -X main.version={{.Version}}
+    tags:
+      - production
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    hooks:
+      pre:
+        - cmd: npm run build
+          dir: frontend
+
+archives:
+  - id: gui
+    name_template: "restless-app_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: "checksums-gui.txt"
+
+snapshot:
+  version_template: "{{ .Tag }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  extra_files:
+    - glob: ./build/appicon.png

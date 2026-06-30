@@ -11,6 +11,17 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+html:not(.p-dark) {
+  --app-bg: #eff1f5;
+  --app-text: #4c4f69;
+  --app-surface: #e6e9ef;
+  --app-overlay: #ccd0da;
+  --app-muted: #9ca0b0;
+  --app-border: #bcc0cc;
+
+  color-scheme: light;
+}
+
 *,
 *::before,
 *::after {

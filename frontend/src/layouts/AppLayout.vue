@@ -6,8 +6,10 @@ import CollectionBrowser from '../components/CollectionBrowser.vue'
 import RequestEditor from '../components/RequestEditor.vue'
 import ResponseViewer from '../components/ResponseViewer.vue'
 import { useAppStore } from '../stores/app'
+import { useTheme } from '../composables/useTheme'
 
 const appStore = useAppStore()
+const { isDark, toggleTheme } = useTheme()
 
 const envLabel = computed(() => appStore.activeEnv || 'No Environment')
 
@@ -30,6 +32,9 @@ const lastResponseTime = computed(() => {
         <span class="app-title">Restless</span>
       </div>
       <div class="top-bar-right">
+        <button class="theme-toggle" @click="toggleTheme" :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'">
+          <i :class="isDark ? 'pi pi-sun' : 'pi pi-moon'" />
+        </button>
         <span class="env-badge">
           <i class="pi pi-globe env-icon" />
           {{ envLabel }}
@@ -120,7 +125,28 @@ const lastResponseTime = computed(() => {
 .top-bar-right {
   display: flex;
   align-items: center;
+  gap: 0.5rem;
   --wails-draggable: no-drag;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--app-muted);
+  cursor: pointer;
+  font-size: 0.82rem;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.theme-toggle:hover {
+  color: var(--app-text);
+  background: var(--app-overlay);
 }
 
 .env-badge {

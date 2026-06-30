@@ -1,16 +1,10 @@
 package tui
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
-
-func TestWithFoldMarker(t *testing.T) {
-	assert.True(t, strings.HasPrefix(stripANSI(withFoldMarker("  x", false)), "▾ x"))
-	assert.True(t, strings.HasPrefix(stripANSI(withFoldMarker("  x", true)), "▸ x"))
-}
 
 func TestRenderCursorLineKeepsText(t *testing.T) {
 	m := DetailModel{selectCol: 2}

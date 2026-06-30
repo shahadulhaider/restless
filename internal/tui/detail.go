@@ -100,6 +100,8 @@ type DetailModel struct {
 
 	// g-prefix (for gp)
 	pendingG bool
+
+	whichKeyIdle bool
 }
 
 type responseReceived struct {
@@ -121,6 +123,42 @@ type historyLoadedMsg struct {
 	entries []history.HistoryEntry
 }
 
+type whichKeyTickMsg struct{}
+
+type whichKeyEntry struct {
+	key   string
+	label string
+}
+
+var whichKeyYank = []whichKeyEntry{
+	{"b", "body"}, {"h", "headers"}, {"a", "all"},
+	{"c", "curl"}, {"l", "line"}, {"p", "path"},
+	{"v", "value"}, {"i", "item"}, {"f", "fold block"},
+	{"g", "code gen…"},
+}
+
+var whichKeyYankGen = []whichKeyEntry{
+	{"p", "python"}, {"j", "javascript"}, {"g", "go"},
+	{"v", "java"}, {"r", "ruby"}, {"h", "httpie"},
+	{"c", "curl"}, {"w", "powershell"},
+}
+
+var whichKeyFold = []whichKeyEntry{
+	{"a", "toggle"}, {"M", "close all"}, {"R", "open all"},
+}
+
+var whichKeyGoto = []whichKeyEntry{
+	{"g", "top"}, {"p", "jump to path"},
+}
+
+var whichKeyNormal = []whichKeyEntry{
+	{"j/k", "navigate"}, {"v", "visual"}, {"V", "visual line"},
+	{"f", "search"}, {"y", "yank…"}, {"z", "fold…"},
+	{"g", "goto…"}, {"1-3", "tabs"}, {"⏎", "send"},
+	{"e", "edit"}, {"i", "inline edit"}, {"p", "pretty"},
+	{"w", "wrap"}, {"l", "line nums"}, {"?", "help"},
+}
+
 var lastVisibleRange [2]int
 
 func NewDetailModel(rootDir string, chainCtx *parser.ChainContext, cookies *engine.CookieManager) DetailModel {
@@ -140,7 +178,7 @@ func NewDetailModel(rootDir string, chainCtx *parser.ChainContext, cookies *engi
 func (m DetailModel) Init() tea.Cmd { return nil }
 
 func (m DetailModel) viewableHeight() int {
-	h := m.height - 4 // toggle bar + sticky header + padding
+	h := m.height - 4
 	if m.searching {
 		h--
 	}
@@ -276,7 +314,16 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 		m.respCollapsed = make(map[int]bool)
 		m.clearSearch()
 
+	case whichKeyTickMsg:
+		if !m.searching && !m.selecting && !m.jumpingPath &&
+			!m.pendingG && !m.pendingZ && !m.pendingY && !m.pendingYG &&
+			!m.showHistory && !m.showDiff {
+			m.whichKeyIdle = true
+		}
+		return m, nil
+
 	case tea.KeyPressMsg:
+		m.whichKeyIdle = false
 		if m.showDiff {
 			switch msg.String() {
 			case "esc", "q":
@@ -842,10 +889,13 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 			}
 		}
 	}
+	if !m.pendingG && !m.pendingZ && !m.pendingY && !m.pendingYG {
+		return m, tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg {
+			return whichKeyTickMsg{}
+		})
+	}
 	return m, nil
 }
-
-
 
 func (m DetailModel) diffView() string {
 	var sb strings.Builder
@@ -886,6 +936,8 @@ func (m DetailModel) handleYank(key string) (DetailModel, tea.Cmd) {
 		text, label = m.yankJSONValue()
 	case "i":
 		text, label = m.yankIndividualItem()
+	case "f":
+		text, label = m.yankFoldBlock()
 	default:
 		if m.mode == modeRequest {
 			switch key {
@@ -1041,6 +1093,37 @@ func (m DetailModel) yankIndividualItem() (string, string) {
 	return m.yankCurrentLine()
 }
 
+func (m DetailModel) yankFoldBlock() (string, string) {
+	if m.activeTab() != 0 || lastFold.bodyStart < 0 {
+		return "", ""
+	}
+	rawLines := m.activeTabRawLines()
+	target := m.cursorLine
+	if _, ok := lastFold.jsonFolds[target]; !ok {
+		for i := target - 1; i >= 0; i-- {
+			if closer, ok := lastFold.jsonFolds[i]; ok && closer >= target {
+				target = i
+				break
+			}
+		}
+	}
+	closer, ok := lastFold.jsonFolds[target]
+	if !ok {
+		return "", ""
+	}
+	if closer >= len(rawLines) {
+		closer = len(rawLines) - 1
+	}
+	var sb strings.Builder
+	for i := target; i <= closer; i++ {
+		if i > target {
+			sb.WriteString("\n")
+		}
+		sb.WriteString(rawLines[i])
+	}
+	return sb.String(), "JSON block"
+}
+
 // --- Code Generation ---
 
 func (m DetailModel) handleCodeGen(key string) (DetailModel, tea.Cmd) {
@@ -1127,29 +1210,18 @@ func (m DetailModel) computeTabFoldState(rawLines []string) foldState {
 	return fs
 }
 
-func foldSummary(lines []string, openFull, closeFull int) string {
-	opener := strings.TrimRight(lines[openFull], " ")
+func foldSummaryClean(lines []string, openIdx, closeIdx int) string {
+	opener := ""
+	if openIdx >= 0 && openIdx < len(lines) {
+		opener = strings.TrimRight(lines[openIdx], " ")
+	}
 	bracket := "}"
-	if closeFull >= 0 && closeFull < len(lines) {
-		if strings.HasPrefix(strings.TrimSpace(stripANSI(lines[closeFull])), "]") {
+	if closeIdx >= 0 && closeIdx < len(lines) {
+		if strings.HasPrefix(strings.TrimSpace(stripANSI(lines[closeIdx])), "]") {
 			bracket = "]"
 		}
 	}
-	return opener + dimStyle.Render(fmt.Sprintf(" … %s (%d lines)", bracket, closeFull-openFull-1))
-}
-
-// withFoldMarker swaps a body line's leading indent for a gutter glyph so
-// foldable JSON nodes are discoverable (▾ expanded, ▸ collapsed).
-func withFoldMarker(line string, collapsed bool) string {
-	glyph := "▾"
-	if collapsed {
-		glyph = "▸"
-	}
-	marker := lipgloss.NewStyle().Foreground(colorBorderActive).Render(glyph)
-	if strings.HasPrefix(line, "  ") {
-		return marker + " " + line[2:]
-	}
-	return marker + " " + line
+	return opener + dimStyle.Render(fmt.Sprintf(" … %s (%d lines)", bracket, closeIdx-openIdx-1))
 }
 
 // renderCursorLine draws the visual-mode cursor line: the selection span is
@@ -1628,7 +1700,7 @@ func (m DetailModel) View() string {
 
 	gutterWidth := 0
 	if m.showLineNums && m.activeTab() == 0 {
-		gutterWidth = len(fmt.Sprintf("%d", len(rawLines))) + 3
+		gutterWidth = len(fmt.Sprintf("%d", len(rawLines))) + 5
 	}
 	lastGutterWidth = gutterWidth
 
@@ -1673,11 +1745,22 @@ func (m DetailModel) View() string {
 	}
 
 	collapsed := m.collapsedFor()
+	isFoldable := lastFold.bodyStart >= 0 && lastFold.jsonFolds != nil
 	for _, lineIdx := range visibleIndices[offIdx:endIdx] {
 		var gutter string
 		if gutterWidth > 0 {
-			numW := gutterWidth - 3
-			gutter = lineNumStyle.Render(fmt.Sprintf("%*d │ ", numW, lineIdx+1))
+			numW := gutterWidth - 5
+			_, hasFold := lastFold.jsonFolds[lineIdx]
+			if isFoldable && hasFold {
+				glyph := "▾"
+				if collapsed[lineIdx] {
+					glyph = "▸"
+				}
+				foldGlyph := lipgloss.NewStyle().Foreground(colorBorderActive).Render(glyph)
+				gutter = foldGlyph + lineNumStyle.Render(fmt.Sprintf("%*d │ ", numW, lineIdx+1))
+			} else {
+				gutter = lineNumStyle.Render(fmt.Sprintf("  %*d │ ", numW, lineIdx+1))
+			}
 		}
 
 		raw := rawLines[lineIdx]
@@ -1688,13 +1771,13 @@ func (m DetailModel) View() string {
 
 		if lastFold.bodyStart >= 0 {
 			if c, ok := lastFold.jsonFolds[lineIdx]; ok {
-				var foldLine string
+				var foldContent string
 				if collapsed[lineIdx] {
-					foldLine = withFoldMarker(foldSummary(coloredLines, lineIdx, c), true)
+					foldContent = foldSummaryClean(coloredLines, lineIdx, c)
 				} else {
-					foldLine = withFoldMarker(colored, false)
+					foldContent = colored
 				}
-				sb.WriteString(gutter + zone.Mark(fmt.Sprintf("fold:%d", lineIdx), foldLine) + "\n")
+				sb.WriteString(zone.Mark(fmt.Sprintf("fold:%d", lineIdx), gutter+foldContent) + "\n")
 				continue
 			}
 		}
@@ -1755,20 +1838,68 @@ func (m DetailModel) View() string {
 	if m.jumpingPath {
 		sb.WriteString("\n" + lipgloss.NewStyle().Foreground(colorBorderActive).Render("path: "+m.jumpQuery+"█"))
 	}
-	if m.pendingG {
-		sb.WriteString("\n" + dimStyle.Render("g- (g:top  p:jump to path)"))
-	}
-	if m.pendingZ {
-		sb.WriteString("\n" + dimStyle.Render("z-"))
-	}
-	if m.pendingY {
-		sb.WriteString("\n" + dimStyle.Render("y- (b:body  h:headers  a:all  c:curl  l:line  p:path  v:value  i:item  g:generate)"))
-	}
-	if m.pendingYG {
-		sb.WriteString("\n" + dimStyle.Render("yg- (p:python  j:javascript  g:go  v:java  r:ruby  h:httpie  c:curl  w:powershell)"))
+	var whichKeyPopup string
+	switch {
+	case m.pendingG:
+		whichKeyPopup = renderWhichKey("g – goto", whichKeyGoto)
+	case m.pendingZ:
+		whichKeyPopup = renderWhichKey("z – fold", whichKeyFold)
+	case m.pendingY:
+		whichKeyPopup = renderWhichKey("y – yank", whichKeyYank)
+	case m.pendingYG:
+		whichKeyPopup = renderWhichKey("yg – generate code", whichKeyYankGen)
+	case m.whichKeyIdle && !m.selecting && !m.searching && !m.jumpingPath:
+		whichKeyPopup = renderWhichKey("keys", whichKeyNormal)
 	}
 
-	return sb.String()
+	result := sb.String()
+	if whichKeyPopup != "" {
+		result = lipgloss.Place(m.width-4, m.height-4, lipgloss.Center, lipgloss.Center, whichKeyPopup, lipgloss.WithWhitespaceChars(" "))
+	}
+	return result
+}
+
+func renderWhichKey(title string, entries []whichKeyEntry) string {
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(colorBorderActive)
+	labelStyle := dimStyle
+
+	var cells []string
+	maxCellWidth := 0
+	for _, e := range entries {
+		cell := keyStyle.Render(e.key) + " " + labelStyle.Render(e.label)
+		cells = append(cells, cell)
+		plainLen := len(e.key) + 1 + len(e.label)
+		if plainLen > maxCellWidth {
+			maxCellWidth = plainLen
+		}
+	}
+
+	cols := 3
+	if len(cells) <= 4 {
+		cols = 2
+	}
+	padWidth := maxCellWidth + 2
+
+	var sb strings.Builder
+	for i, cell := range cells {
+		if i > 0 && i%cols == 0 {
+			sb.WriteString("\n")
+		}
+		plain := entries[i].key + " " + entries[i].label
+		padding := padWidth - len(plain)
+		if padding < 1 {
+			padding = 1
+		}
+		sb.WriteString(cell + strings.Repeat(" ", padding))
+	}
+
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(colorBorderActive).
+		Padding(0, 1)
+
+	header := lipgloss.NewStyle().Bold(true).Foreground(colorText).Render(title)
+	return boxStyle.Render(header + "\n" + sb.String())
 }
 
 func (m DetailModel) toggleBar() string {

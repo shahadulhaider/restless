@@ -12,6 +12,17 @@ export default defineConfig({
   build: {
     outDir: "../cmd/restless-app/dist",
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (id.includes("monaco-editor/esm/vs/editor")) return "monaco-core";
+          if (id.includes("monaco-editor/esm/vs/language")) return "monaco-lang";
+          if (id.includes("monaco-editor/esm/vs/basic-languages")) return "monaco-basic-lang";
+          if (id.includes("monaco-editor")) return "monaco-misc";
+          if (id.includes("primevue") || id.includes("primeuix")) return "primevue";
+        },
+      },
+    },
   },
   plugins: [vue(), wails("./bindings")],
 });

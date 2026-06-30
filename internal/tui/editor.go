@@ -148,9 +148,15 @@ func NewEditorModelFromRequest(req model.Request) EditorModel {
 	return m
 }
 
-// SetAvailableVars provides the list of variable names for auto-complete.
 func (m *EditorModel) SetAvailableVars(vars []string) {
 	m.availableVars = vars
+}
+
+func (m *EditorModel) FocusField(f focusedField) {
+	m.focus = f
+	if f == fieldHeaderKey {
+		m.headerOnKey = true
+	}
 }
 
 func (m EditorModel) Request() model.Request {

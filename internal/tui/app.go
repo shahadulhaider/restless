@@ -72,6 +72,7 @@ type App struct {
 	showHelp      bool
 	help          HelpModel
 	editingReq    *model.Request // nil = create mode, non-nil = edit mode
+	initialEnv    string         // env name passed via --env flag
 	currentEnv    string
 	envFile       *model.EnvironmentFile
 	envVars       map[string]string
@@ -81,20 +82,21 @@ type App struct {
 	draggingSplit bool
 }
 
-func New(rootDir string) App {
+func New(rootDir, initialEnv string) App {
 	zone.NewGlobal()
 	chainCtx := parser.NewChainContext()
 	cookies := engine.NewCookieManager()
 	return App{
-		rootDir:   rootDir,
-		splitPct:  30,
-		browser:   NewBrowserModel(),
-		detail:    NewDetailModel(rootDir, chainCtx, cookies),
-		search:    NewSearchModel(),
-		envSwitch: NewEnvModel(),
-		chainCtx:  chainCtx,
-		cookies:   cookies,
-		envVars:   make(map[string]string),
+		rootDir:    rootDir,
+		initialEnv: initialEnv,
+		splitPct:   30,
+		browser:    NewBrowserModel(),
+		detail:     NewDetailModel(rootDir, chainCtx, cookies),
+		search:     NewSearchModel(),
+		envSwitch:  NewEnvModel(),
+		chainCtx:   chainCtx,
+		cookies:    cookies,
+		envVars:    make(map[string]string),
 	}
 }
 
@@ -163,6 +165,16 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.envFile = msg.envFile
 		m.envSwitch.SetEnvFile(msg.envFile, m.currentEnv)
 		m.envSwitch.SetHasFile(parser.EnvFilePath(m.rootDir) != "")
+		if m.initialEnv != "" && m.currentEnv == "" && msg.envFile != nil {
+			if _, ok := msg.envFile.Environments[m.initialEnv]; ok {
+				m.currentEnv = m.initialEnv
+				vars, _ := parser.ResolveEnvironment(msg.envFile, m.initialEnv)
+				m.envVars = vars
+				m.envSwitch.SetEnvFile(msg.envFile, m.initialEnv)
+				m.detail, _ = m.detail.Update(envVarsMsg{vars: m.envVars, envName: m.initialEnv})
+			}
+			m.initialEnv = ""
+		}
 		return m, nil
 
 	case collectionReloadMsg:
@@ -363,6 +375,18 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusText, cmd = setStatus("Copied " + msg.label + " to clipboard")
 		}
 		return m, cmd
+
+	case inlineEditRequest:
+		m.editor = NewEditorModelFromRequest(*msg.request)
+		m.editor.SetAvailableVars(m.collectAvailableVars())
+		if msg.focus == "headers" {
+			m.editor.FocusField(fieldHeaderKey)
+		} else {
+			m.editor.FocusField(fieldBody)
+		}
+		m.editingReq = msg.request
+		m.showEditor = true
+		return m, nil
 
 	case responseReceived:
 		if msg.resp != nil && msg.resp.Request != nil {
@@ -675,7 +699,15 @@ func (m App) View() tea.View {
 		content = lipgloss.JoinVertical(lipgloss.Left, m.search.View(), content)
 	}
 	if m.showEnvSwitch {
-		content = lipgloss.JoinVertical(lipgloss.Left, m.envSwitch.View(), content)
+		envView := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorBorderActive).
+			Padding(1, 2).
+			Width(m.width * 4 / 10).
+			Render(m.envSwitch.View())
+		content = lipgloss.Place(m.width, m.height-1, lipgloss.Center, lipgloss.Center, envView, lipgloss.WithWhitespaceChars(" "))
+		content = clampHeight(content, m.height-1)
+		content = lipgloss.JoinVertical(lipgloss.Left, content, statusBar)
 	}
 	if m.showHelp {
 		helpView := lipgloss.NewStyle().
@@ -705,8 +737,8 @@ func clampHeight(s string, maxLines int) string {
 	return strings.Join(lines[:maxLines], "\n")
 }
 
-func RunApp(rootDir string) error {
-	p := tea.NewProgram(New(rootDir))
+func RunApp(rootDir, initialEnv string) error {
+	p := tea.NewProgram(New(rootDir, initialEnv))
 	_, err := p.Run()
 	return err
 }

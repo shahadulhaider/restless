@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"image/color"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -88,6 +89,10 @@ type DetailModel struct {
 	searchHits   []int
 	searchIdx    int
 
+	// Persistent cursor
+	cursorLine int // persistent cursor line in accordion content
+	cursorCol  int // persistent cursor column (rune index)
+
 	// Visual selection mode (character-level)
 	selecting       bool
 	selectAnchor    int      // anchor line
@@ -95,6 +100,7 @@ type DetailModel struct {
 	selectCursor    int      // cursor line (decoupled from scroll offset)
 	selectCol       int      // cursor column (rune index)
 	selectLines     []string // plain-text snapshot captured on entry
+	selectLineMode  bool     // true = visual line mode (V)
 
 	// JSON path jump
 	jumpingPath bool
@@ -113,6 +119,11 @@ type responseReceived struct {
 	err  error
 }
 
+type inlineEditRequest struct {
+	request *model.Request
+	focus   string // "body" or "headers"
+}
+
 type yankResult struct {
 	label string
 	err   error
@@ -122,8 +133,8 @@ type historyLoadedMsg struct {
 	entries []history.HistoryEntry
 }
 
-// Package-level section ranges (View is value receiver)
 var lastSectionLines []sectionRange
+var lastVisibleRange [2]int
 
 func NewDetailModel(rootDir string, chainCtx *parser.ChainContext, cookies *engine.CookieManager) DetailModel {
 	return DetailModel{
@@ -210,6 +221,8 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 		m.mode = modeRequest
 		m.reqOffset = 0
 		m.respOffset = 0
+		m.cursorLine = 0
+		m.cursorCol = 0
 		m.errMsg = ""
 		m.showHistory = false
 		m.clearSearch()
@@ -243,6 +256,8 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 			m.mode = modeResponse
 		}
 		m.respOffset = 0
+		m.cursorLine = 0
+		m.cursorCol = 0
 		hasAssertions := m.response != nil && len(m.response.AssertionResults) > 0
 		if hasAssertions && !assert.AllPassed(m.response.AssertionResults) {
 			// Auto-expand assertions section if any failed
@@ -348,6 +363,7 @@ func (m DetailModel) updateSelecting(msg tea.KeyPressMsg) (DetailModel, tea.Cmd)
 	case "esc":
 		m.selecting = false
 		m.selectLines = nil
+		m.selectLineMode = false
 	case "j", "down":
 		if m.selectCursor < last {
 			m.selectCursor++
@@ -392,6 +408,7 @@ func (m DetailModel) updateSelecting(msg tea.KeyPressMsg) (DetailModel, tea.Cmd)
 		text := m.selectedTextRange()
 		m.selecting = false
 		m.selectLines = nil
+		m.selectLineMode = false
 		if text == "" {
 			return m, nil
 		}
@@ -443,6 +460,9 @@ func (m DetailModel) lineSelCols(lineIdx, lineLen int) (a, b int, ok bool) {
 	if lineIdx < loL || lineIdx > hiL {
 		return 0, 0, false
 	}
+	if m.selectLineMode {
+		return 0, lineLen, true
+	}
 	a, b = 0, lineLen
 	if lineIdx == loL {
 		a = loC
@@ -462,6 +482,13 @@ func (m DetailModel) lineSelCols(lineIdx, lineLen int) (a, b int, ok bool) {
 	return a, b, true
 }
 
+var lineNumPrefix = regexp.MustCompile(`^\s*\d+\s*│ `)
+
+func stripLineNumPrefix(s string) string {
+	s = strings.TrimPrefix(s, "  ")
+	return lineNumPrefix.ReplaceAllString(s, "")
+}
+
 func (m DetailModel) selectedTextRange() string {
 	loL, loC, hiL, hiC := m.selectionBounds()
 	if loL < 0 || loL >= len(m.selectLines) {
@@ -471,14 +498,15 @@ func (m DetailModel) selectedTextRange() string {
 		hiL = len(m.selectLines) - 1
 	}
 	if loL == hiL {
-		return runeSlice(m.selectLines[loL], loC, hiC+1)
+		raw := runeSlice(m.selectLines[loL], loC, hiC+1)
+		return stripLineNumPrefix(raw)
 	}
 	var sb strings.Builder
-	sb.WriteString(runeSlice(m.selectLines[loL], loC, -1))
+	sb.WriteString(stripLineNumPrefix(runeSlice(m.selectLines[loL], loC, -1)))
 	for i := loL + 1; i < hiL; i++ {
-		sb.WriteString("\n" + m.selectLines[i])
+		sb.WriteString("\n" + stripLineNumPrefix(m.selectLines[i]))
 	}
-	sb.WriteString("\n" + runeSlice(m.selectLines[hiL], 0, hiC+1))
+	sb.WriteString("\n" + stripLineNumPrefix(runeSlice(m.selectLines[hiL], 0, hiC+1)))
 	return sb.String()
 }
 
@@ -567,7 +595,9 @@ func (m *DetailModel) jumpToPath(target string) {
 	for i := range lines {
 		path := jsonLineToPath(body, i)
 		if path == target || strings.HasSuffix(path, strings.TrimPrefix(target, "$")) {
-			m.setOffset(i)
+			m.cursorLine = i
+			m.cursorCol = 0
+			m.scrollViewToCursor()
 			return
 		}
 	}
@@ -581,7 +611,9 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 		m.pendingG = false
 		switch key {
 		case "g":
-			m.setOffset(0)
+			m.cursorLine = 0
+			m.cursorCol = 0
+			m.scrollViewToCursor()
 		case "p":
 			m.jumpingPath = true
 			m.jumpQuery = ""
@@ -637,15 +669,29 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 		return m, nil
 	case "v":
 		m.selecting = true
-		m.selectAnchor = m.offset()
-		m.selectAnchorCol = 0
-		m.selectCursor = m.offset()
-		m.selectCol = 0
+		m.selectLineMode = false
+		m.selectAnchor = m.cursorLine
+		m.selectAnchorCol = m.cursorCol
+		m.selectCursor = m.cursorLine
+		m.selectCol = m.cursorCol
 		raw := strings.Split(m.currentAccordionContent(), "\n")
 		m.selectLines = make([]string, len(raw))
 		for i, l := range raw {
 			m.selectLines[i] = stripANSI(l)
 		}
+		return m, nil
+	case "V":
+		m.selecting = true
+		m.selectLineMode = true
+		m.selectAnchor = m.cursorLine
+		m.selectAnchorCol = 0
+		m.selectCursor = m.cursorLine
+		raw := strings.Split(m.currentAccordionContent(), "\n")
+		m.selectLines = make([]string, len(raw))
+		for i, l := range raw {
+			m.selectLines[i] = stripANSI(l)
+		}
+		m.selectCol = m.selectLineLen(m.cursorLine)
 		return m, nil
 
 	// Request/Response toggle
@@ -744,24 +790,27 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 			}
 		}
 
-	// Scrolling
+	// Cursor movement
 	case "j", "down":
-		m.scrollBy(1)
+		m.moveCursor(1)
 	case "k", "up":
-		m.scrollBy(-1)
+		m.moveCursor(-1)
 	case "ctrl+d":
-		m.scrollBy(m.viewableHeight() / 2)
+		m.moveCursor(m.viewableHeight() / 2)
 	case "ctrl+u":
-		m.scrollBy(-m.viewableHeight() / 2)
+		m.moveCursor(-m.viewableHeight() / 2)
 	case "g":
 		m.pendingG = true
 		return m, nil
 	case "G":
 		if lastFold.bodyStart >= 0 && len(lastFold.visible) > 0 {
-			m.setOffset(lastFold.visible[len(lastFold.visible)-1])
+			m.cursorLine = lastFold.visible[len(lastFold.visible)-1]
 		} else {
-			m.setOffset(999999)
+			content := m.currentAccordionContent()
+			m.cursorLine = max(len(strings.Split(content, "\n"))-1, 0)
 		}
+		m.cursorCol = 0
+		m.scrollViewToCursor()
 
 	// Body controls
 	case "w":
@@ -789,6 +838,17 @@ func (m DetailModel) updateNormal(msg tea.KeyPressMsg) (DetailModel, tea.Cmd) {
 			m.searchIdx = (m.searchIdx - 1 + len(m.searchHits)) % len(m.searchHits)
 			m.setOffset(m.searchHits[m.searchIdx])
 		}
+	case "i":
+		if m.mode == modeRequest && m.request != nil {
+			focus := "body"
+			if m.sectionAtOffset() == sectionHeaders {
+				focus = "headers"
+			}
+			req := m.request
+			return m, func() tea.Msg {
+				return inlineEditRequest{request: req, focus: focus}
+			}
+		}
 	}
 	return m, nil
 }
@@ -811,9 +871,9 @@ func (m *DetailModel) toggleSection(idx int) {
 }
 
 func (m DetailModel) sectionAtOffset() section {
-	off := m.offset()
+	cur := m.cursorLine
 	for _, sr := range lastSectionLines {
-		if off >= sr.start && off <= sr.end {
+		if cur >= sr.start && cur <= sr.end {
 			return sr.sec
 		}
 	}
@@ -937,11 +997,11 @@ func (m DetailModel) handleYank(key string) (DetailModel, tea.Cmd) {
 func (m DetailModel) yankCurrentLine() (string, string) {
 	content := m.currentAccordionContent()
 	lines := strings.Split(content, "\n")
-	off := m.offset()
-	if off < 0 || off >= len(lines) {
+	cur := m.cursorLine
+	if cur < 0 || cur >= len(lines) {
 		return "", ""
 	}
-	plain := strings.TrimSpace(stripANSI(lines[off]))
+	plain := strings.TrimSpace(stripANSI(lines[cur]))
 	if plain == "" {
 		return "", ""
 	}
@@ -958,7 +1018,7 @@ func (m DetailModel) yankJSONPath() (string, string) {
 	if body == "" {
 		return "", ""
 	}
-	path := jsonLineToPath(body, m.offset())
+	path := jsonLineToPath(body, m.cursorLine)
 	if path == "$" {
 		return "$", "JSON path"
 	}
@@ -975,7 +1035,7 @@ func (m DetailModel) yankJSONValue() (string, string) {
 	if body == "" {
 		return "", ""
 	}
-	path := jsonLineToPath(body, m.offset())
+	path := jsonLineToPath(body, m.cursorLine)
 	if path == "$" {
 		return body, "JSON root"
 	}
@@ -1004,9 +1064,9 @@ func (m DetailModel) yankIndividualItem() (string, string) {
 		}
 		content := m.currentAccordionContent()
 		lines := strings.Split(content, "\n")
-		off := m.offset()
-		if off >= 0 && off < len(lines) {
-			plain := strings.TrimSpace(stripANSI(lines[off]))
+		cur := m.cursorLine
+		if cur >= 0 && cur < len(lines) {
+			plain := strings.TrimSpace(stripANSI(lines[cur]))
 			for _, h := range headers {
 				if strings.Contains(plain, h.Key) && strings.Contains(plain, h.Value) {
 					return h.Key + ": " + h.Value, "header " + h.Key
@@ -1175,6 +1235,58 @@ func (m DetailModel) renderCursorLine(runes []rune, a, b int, sel bool) string {
 	return sb.String()
 }
 
+func (m *DetailModel) scrollViewToCursor() {
+	vh := m.viewableHeight()
+	vis := lastFold.visible
+	if lastFold.bodyStart >= 0 && len(vis) > 0 {
+		curIdx := visIndexOf(vis, m.cursorLine)
+		offIdx := visIndexOf(vis, m.offset())
+		if curIdx < offIdx {
+			m.setOffset(vis[curIdx])
+		} else if curIdx >= offIdx+vh {
+			newOff := curIdx - vh + 1
+			if newOff < 0 {
+				newOff = 0
+			}
+			m.setOffset(vis[newOff])
+		}
+	} else {
+		if m.cursorLine < m.offset() {
+			m.setOffset(m.cursorLine)
+		} else if m.cursorLine >= m.offset()+vh {
+			m.setOffset(m.cursorLine - vh + 1)
+		}
+	}
+}
+
+func (m *DetailModel) moveCursor(n int) {
+	vis := lastFold.visible
+	if lastFold.bodyStart >= 0 && len(vis) > 0 {
+		cur := visIndexOf(vis, m.cursorLine) + n
+		if cur < 0 {
+			cur = 0
+		}
+		if cur > len(vis)-1 {
+			cur = len(vis) - 1
+		}
+		m.cursorLine = vis[cur]
+	} else {
+		m.cursorLine += n
+		if m.cursorLine < 0 {
+			m.cursorLine = 0
+		}
+		content := m.currentAccordionContent()
+		maxLine := len(strings.Split(content, "\n")) - 1
+		if maxLine < 0 {
+			maxLine = 0
+		}
+		if m.cursorLine > maxLine {
+			m.cursorLine = maxLine
+		}
+	}
+	m.scrollViewToCursor()
+}
+
 // scrollBy advances the offset by n lines, skipping JSON lines hidden inside
 // collapsed folds (using the layout from the last render).
 func (m *DetailModel) scrollBy(n int) {
@@ -1201,7 +1313,7 @@ func (m *DetailModel) toggleFoldAtCursor() {
 	if lastFold.bodyStart < 0 {
 		return
 	}
-	j := m.offset() - lastFold.bodyStart
+	j := m.cursorLine - lastFold.bodyStart
 	if _, ok := lastFold.jsonFolds[j]; !ok {
 		return
 	}
@@ -1263,8 +1375,7 @@ func (m DetailModel) View() string {
 		// JSON path indicator
 		if m.respFolds[0] && len(m.response.Body) > 0 && strings.Contains(strings.ToLower(m.response.ContentType), "json") {
 			body := string(m.response.Body)
-			off := m.respOffset
-			path := jsonLineToPath(body, off)
+			path := jsonLineToPath(body, m.cursorLine)
 			if path != "$" {
 				sb.WriteString("\n")
 				sb.WriteString(dimStyle.Render("  " + path))
@@ -1296,6 +1407,8 @@ func (m DetailModel) View() string {
 		headerKey[sr.start] = fmt.Sprintf("%d", int(sr.sec)+1)
 	}
 
+	lastVisibleRange = [2]int{0, 0}
+
 	if lastFold.bodyStart >= 0 {
 		vis := lastFold.visible
 		collapsed := m.collapsedFor()
@@ -1313,6 +1426,9 @@ func (m DetailModel) View() string {
 		if endIdx > len(vis) {
 			endIdx = len(vis)
 		}
+		if endIdx > cur {
+			lastVisibleRange = [2]int{vis[cur], vis[endIdx-1]}
+		}
 		for _, full := range vis[cur:endIdx] {
 			if j := full - lastFold.bodyStart; j >= 0 {
 				if c, ok := lastFold.jsonFolds[j]; ok {
@@ -1327,8 +1443,14 @@ func (m DetailModel) View() string {
 				}
 			}
 			l := lines[full]
+			if full == m.cursorLine {
+				cursorLineStyle := lipgloss.NewStyle().Background(lipgloss.Color("#2A2A3C"))
+				l = cursorLineStyle.Render(stripANSI(l))
+			}
 			if key, ok := headerKey[full]; ok {
 				l = zone.Mark("dt:sec:"+key, l)
+			} else {
+				l = zone.Mark(fmt.Sprintf("dt:line:%d", full), l)
 			}
 			sb.WriteString(l + "\n")
 		}
@@ -1355,22 +1477,33 @@ func (m DetailModel) View() string {
 		if end > len(lines) {
 			end = len(lines)
 		}
+		if end > off {
+			lastVisibleRange = [2]int{off, end - 1}
+		}
 		for i, l := range lines[off:end] {
 			lineIdx := off + i
 			if m.selecting {
-				runes := []rune(stripANSI(l))
-				a, b, sel := m.lineSelCols(lineIdx, len(runes))
+				plainRunes := []rune(stripANSI(l))
+				a, b, sel := m.lineSelCols(lineIdx, len(plainRunes))
 				if lineIdx == m.selectCursor {
-					sb.WriteString(m.renderCursorLine(runes, a, b, sel) + "\n")
+					sb.WriteString(m.renderCursorLine(plainRunes, a, b, sel) + "\n")
 					continue
 				}
 				if sel {
-					sb.WriteString(string(runes[:a]) + selectStyle.Render(string(runes[a:b])) + string(runes[b:]) + "\n")
+					sb.WriteString(string(plainRunes[:a]) + selectStyle.Render(string(plainRunes[a:b])) + string(plainRunes[b:]) + "\n")
 					continue
 				}
+				sb.WriteString(l + "\n")
+				continue
+			}
+			if !m.selecting && lineIdx == m.cursorLine {
+				cursorLineStyle := lipgloss.NewStyle().Background(lipgloss.Color("#2A2A3C"))
+				l = cursorLineStyle.Render(stripANSI(l))
 			}
 			if key, ok := headerKey[lineIdx]; ok {
 				l = zone.Mark("dt:sec:"+key, l)
+			} else {
+				l = zone.Mark(fmt.Sprintf("dt:line:%d", lineIdx), l)
 			}
 			sb.WriteString(l + "\n")
 		}
@@ -1397,8 +1530,12 @@ func (m DetailModel) View() string {
 		sb.WriteString(lipgloss.NewStyle().Foreground(colorBorderActive).Render("find: " + m.searchQuery + "█" + matchInfo))
 	}
 	if m.selecting {
+		modeLabel := "VISUAL"
+		if m.selectLineMode {
+			modeLabel = "VISUAL LINE"
+		}
 		sb.WriteString("\n" + lipgloss.NewStyle().Foreground(colorBorderActive).Render(
-			fmt.Sprintf("-- VISUAL -- L%d:C%d  │  h/l/j/k/w/b:move  0/$:line  y:copy  esc:cancel", m.selectCursor+1, m.selectCol+1)))
+			fmt.Sprintf("-- %s -- L%d:C%d  │  h/l/j/k/w/b:move  0/$:line  y:copy  esc:cancel", modeLabel, m.selectCursor+1, m.selectCol+1)))
 	}
 	if m.jumpingPath {
 		sb.WriteString("\n" + lipgloss.NewStyle().Foreground(colorBorderActive).Render("path: "+m.jumpQuery+"█"))

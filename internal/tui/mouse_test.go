@@ -48,7 +48,7 @@ func TestDetailScrollByClampsAtTop(t *testing.T) {
 }
 
 func TestHandleMouseClickFocus(t *testing.T) {
-	m := New("")
+	m := New("", "")
 	m.width = 100
 	m.height = 30
 	m.focus = PaneBrowser
@@ -61,7 +61,7 @@ func TestHandleMouseClickFocus(t *testing.T) {
 }
 
 func TestHandleMouseClickIgnoredWithOverlay(t *testing.T) {
-	m := New("")
+	m := New("", "")
 	m.width = 100
 	m.height = 30
 	m.focus = PaneBrowser
@@ -71,7 +71,7 @@ func TestHandleMouseClickIgnoredWithOverlay(t *testing.T) {
 }
 
 func TestDividerDragResizes(t *testing.T) {
-	m := New("")
+	m := New("", "")
 	m.width = 100
 	m.height = 30
 
@@ -86,7 +86,7 @@ func TestDividerDragResizes(t *testing.T) {
 }
 
 func TestDragClampsToBounds(t *testing.T) {
-	m := New("")
+	m := New("", "")
 	m.width = 100
 	m.height = 30
 	m.draggingSplit = true
@@ -99,7 +99,7 @@ func TestDragClampsToBounds(t *testing.T) {
 }
 
 func TestHandleMouseWheelRoutesToPane(t *testing.T) {
-	m := New("")
+	m := New("", "")
 	m.width = 100
 	m.height = 30
 	m.browser.items = make([]BrowserItem, 20)
@@ -115,7 +115,7 @@ func TestHandleMouseWheelRoutesToPane(t *testing.T) {
 }
 
 func TestAppHandlesMouseSequenceNoPanic(t *testing.T) {
-	model0, _ := New("").Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	model0, _ := New("", "").Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	app := model0.(App)
 
 	for _, msg := range []tea.Msg{
@@ -130,7 +130,7 @@ func TestAppHandlesMouseSequenceNoPanic(t *testing.T) {
 }
 
 func TestAppViewScansMarkedRows(t *testing.T) {
-	model0, _ := New("").Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	model0, _ := New("", "").Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	app := model0.(App)
 
 	app.browser.SetCollection(&model.Collection{

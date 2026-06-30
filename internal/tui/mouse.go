@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	zone "github.com/lrstanley/bubblezone/v2"
@@ -126,25 +127,65 @@ func (m App) handleZoneClick(msg tea.MouseClickMsg) (App, tea.Cmd, bool) {
 			return m, nil, true
 		}
 	}
+	for lineIdx := lastVisibleRange[0]; lineIdx <= lastVisibleRange[1]; lineIdx++ {
+		if z := zone.Get(fmt.Sprintf("dt:line:%d", lineIdx)); z != nil && z.InBounds(msg) {
+			m.focus = PaneDetail
+			if m.detail.selecting {
+				m.detail.selecting = false
+				m.detail.selectLines = nil
+				m.detail.selectLineMode = false
+			}
+			m.detail.cursorLine = lineIdx
+			m.detail.cursorCol = 0
+			return m, nil, true
+		}
+	}
 	return m, nil, false
 }
 
 func (m App) handleMouseMotion(msg tea.MouseMotionMsg) (App, tea.Cmd) {
-	if !m.draggingSplit || msg.Button != tea.MouseLeft || m.width <= 0 {
-		return m, nil
+	if msg.Button == tea.MouseLeft && m.draggingSplit {
+		if m.width <= 0 {
+			return m, nil
+		}
+		pct := msg.X * 100 / m.width
+		if pct < 15 {
+			pct = 15
+		}
+		if pct > 65 {
+			pct = 65
+		}
+		if pct == m.splitPct {
+			return m, nil
+		}
+		m.splitPct = pct
+		return m, m.resizePanes()
 	}
-	pct := msg.X * 100 / m.width
-	if pct < 15 {
-		pct = 15
+	if msg.Button == tea.MouseLeft && !m.draggingSplit {
+		lay := m.computeLayout()
+		if lay.detail.contains(msg.X, msg.Y) {
+			for lineIdx := lastVisibleRange[0]; lineIdx <= lastVisibleRange[1]; lineIdx++ {
+				if z := zone.Get(fmt.Sprintf("dt:line:%d", lineIdx)); z != nil && z.InBounds(msg) {
+					if !m.detail.selecting {
+						m.detail.selecting = true
+						m.detail.selectLineMode = false
+						m.detail.selectAnchor = m.detail.cursorLine
+						m.detail.selectAnchorCol = 0
+						raw := strings.Split(m.detail.currentAccordionContent(), "\n")
+						m.detail.selectLines = make([]string, len(raw))
+						for i, l := range raw {
+							m.detail.selectLines[i] = stripANSI(l)
+						}
+					}
+					m.detail.selectCursor = lineIdx
+					m.detail.selectCol = m.detail.selectLineLen(lineIdx)
+					m.focus = PaneDetail
+					break
+				}
+			}
+		}
 	}
-	if pct > 65 {
-		pct = 65
-	}
-	if pct == m.splitPct {
-		return m, nil
-	}
-	m.splitPct = pct
-	return m, m.resizePanes()
+	return m, nil
 }
 
 func (m App) handleMouseRelease(_ tea.MouseReleaseMsg) (App, tea.Cmd) {

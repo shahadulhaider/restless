@@ -13,7 +13,7 @@ import (
 
 func TestViewFitsTerminalHeight(t *testing.T) {
 	const w, h = 100, 24
-	model0, _ := New("").Update(tea.WindowSizeMsg{Width: w, Height: h})
+	model0, _ := New("", "").Update(tea.WindowSizeMsg{Width: w, Height: h})
 	app := model0.(App)
 
 	var items []string
@@ -36,7 +36,7 @@ func TestViewFitsTerminalHeight(t *testing.T) {
 
 func TestViewFitsTerminalHeightSmallBody(t *testing.T) {
 	const w, h = 100, 24
-	model0, _ := New("").Update(tea.WindowSizeMsg{Width: w, Height: h})
+	model0, _ := New("", "").Update(tea.WindowSizeMsg{Width: w, Height: h})
 	app := model0.(App)
 	app.detail.request = &model.Request{Method: "GET", URL: "http://x"}
 	app.detail.response = &model.Response{StatusCode: 200, Status: "OK", ContentType: "application/json", Body: []byte(`{"ok":true}`)}

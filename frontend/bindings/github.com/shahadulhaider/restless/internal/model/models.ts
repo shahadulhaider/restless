@@ -48,6 +48,11 @@ export interface AssertionResult {
     "Error": string;
 }
 
+export interface Collection {
+    "RootDir": string;
+    "Files": HTTPFile[] | null;
+}
+
 export interface Environment {
     "Name": string;
     "Variables": { [_ in string]?: string } | null;
@@ -56,6 +61,11 @@ export interface Environment {
 export interface EnvironmentFile {
     "Shared": { [_ in string]?: string } | null;
     "Environments": { [_ in string]?: Environment } | null;
+}
+
+export interface HTTPFile {
+    "Path": string;
+    "Requests": Request[] | null;
 }
 
 export interface Header {

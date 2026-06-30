@@ -10,8 +10,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@guolao/vue-monaco-editor": "^1.6.0",
     "@primeuix/themes": "^2.0.3",
     "@wailsio/runtime": "latest",
+    "monaco-editor": "^0.55.1",
     "pinia": "^3.0.4",
     "primeicons": "^7.0.0",
     "primevue": "^4.5.5",

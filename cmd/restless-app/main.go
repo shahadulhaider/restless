@@ -28,10 +28,12 @@ func main() {
 		Description: "Your API workbench — desktop edition",
 		Services: []application.Service{
 			application.NewService(&GreetService{rootDir: abs}),
+			application.NewService(&gui.CollectionService{}),
 			application.NewService(&gui.EnvironmentService{}),
 			application.NewService(&gui.ExporterService{}),
 			application.NewService(&gui.ImporterService{}),
 			application.NewService(&gui.HistoryService{}),
+			application.NewService(gui.NewRequestService()),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

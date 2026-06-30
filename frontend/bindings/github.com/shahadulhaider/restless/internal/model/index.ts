@@ -4,8 +4,10 @@
 export type {
     Assertion,
     AssertionResult,
+    Collection,
     Environment,
     EnvironmentFile,
+    HTTPFile,
     Header,
     Request,
     RequestMetadata,

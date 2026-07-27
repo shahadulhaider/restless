@@ -59,8 +59,8 @@ restless run api.http
 
 ## Features
 
-- **Interactive TUI** — browse collections, send requests, inspect responses with collapsible accordion view
-- **Mouse support** — wheel-scroll, click to select/focus, click headers to fold, drag the divider to resize
+- **Interactive TUI** — browse collections, send requests, inspect responses in a tabbed detail pane
+- **Mouse support** — wheel-scroll, click to select/focus, click a tab to switch, click `▾`/`▸` to fold JSON, drag the divider to resize
 - **`.http` files** — plain text, Git-friendly, JetBrains-compatible
 - **Request/Response toggle** — `r`/`s` to switch views, both with syntax highlighting, fold/scroll/search/yank
 - **JSON folding** — collapse/expand individual objects and arrays with `za`
@@ -73,7 +73,7 @@ restless run api.http
 - **Code generation** — `yg` + key to copy as Python, JavaScript, Go, Java, Ruby, HTTPie, curl, PowerShell
 - **Import from anywhere** — Postman, Insomnia, Bruno, curl commands, OpenAPI/Swagger
 - **$EDITOR integration** — press `e` to edit in nvim/vim/code
-- **Vim-style commands** — `za` JSON folds, `zo`/`zc`/`zR`/`zM` section folds, `v` visual selection, `yb`/`yh`/`ya`/`yc` yank
+- **Vim-style commands** — `za`/`zR`/`zM` JSON folds, `v`/`V` visual selection, `yb`/`yh`/`ya`/`yc`/`yf` yank
 - **Cookie jar** — cookies persist per environment automatically
 - **Pre-request & post-response scripting** — JavaScript (ES5.1) via `# @pre-request { ... }` and `# @post-response { ... }` with crypto builtins (hmac, sha256, base64)
 - **Proxy & SSL** — `# @insecure`, `# @proxy`, `--insecure`, `--proxy` flags
@@ -89,12 +89,14 @@ Press `?` in the TUI for the full reference. Press `F1` for context-sensitive he
 | `Enter` | Send request / select |
 | `e` | Edit in `$EDITOR` |
 | `r/s` | Request / Response view |
-| `1/2/3` | Toggle sections |
-| `Space` | Fold/unfold section |
+| `1/2/3` | Select tab |
+| `4` | Assertions tab (response, when present) |
+| `Space` | Next tab |
 | `za` | Fold/unfold JSON node |
-| `v` | Visual selection (character-level) |
+| `v/V` | Visual selection (character / line) |
 | Mouse | Scroll, click, drag to resize |
 | `yb/yh/ya/yc` | Copy body/headers/all/curl |
+| `yf` | Copy JSON fold block |
 | `yg` + key | Generate code |
 | `p` | Pretty/raw toggle |
 | `f` | Search in body |
@@ -121,7 +123,7 @@ restless import openapi <spec>          # Import OpenAPI/Swagger
 |-------|-------------|
 | [Getting Started](https://github.com/shahadulhaider/restless/wiki/Getting-Started) | First collection, environments, CI/CD |
 | [.http File Format](https://github.com/shahadulhaider/restless/wiki/HTTP-File-Format) | Full syntax reference, variables, assertions |
-| [All Keybindings](https://github.com/shahadulhaider/restless/wiki/Keybindings) | Complete keyboard reference |
+| [All Keybindings](docs/keybindings.md) | Complete keyboard reference |
 | [Environments](https://github.com/shahadulhaider/restless/wiki/Environments) | Inline vars, env files, dynamic vars |
 | [Assertions](https://github.com/shahadulhaider/restless/wiki/Assertions) | Response assertions for CI/CD |
 | [Scripting](https://github.com/shahadulhaider/restless/wiki/Scripting) | Pre-request & post-response JavaScript |

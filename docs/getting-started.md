@@ -53,12 +53,13 @@ restless .
 - Use `j`/`k` to navigate the request list
 - Press `Enter` to expand files and select requests
 - Press `Enter` again (or `Ctrl+R`) to send the request
-- The response appears immediately with body expanded
+- The response appears immediately on the Body tab (a response with failing assertions opens on the Assertions tab)
 
 ### 4. Explore the Response
 
-- Press `1`/`2`/`3` to toggle Body, Headers, and Timing sections; toggle Assertions with `Space`
-- Press `Space` to fold/unfold the section under your cursor
+- Press `1`/`2`/`3` to select the Body, Headers, and Timing tabs; `4` selects Assertions when the request has any
+- Press `Space` to cycle to the next tab
+- Press `za` to fold/unfold the JSON node under your cursor
 - Press `p` to toggle pretty-print vs raw
 - Press `f` to search in the response body
 

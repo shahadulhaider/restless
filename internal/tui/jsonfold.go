@@ -3,9 +3,9 @@ package tui
 import "strings"
 
 // foldState captures everything the renderer and scroll handlers need to fold
-// JSON body nodes. bodyStart is the full accordion line index of the first body
+// JSON body nodes. bodyStart is the full rendered line index of the first body
 // JSON line, so JSON-line j maps to full line bodyStart+j. It is -1 when folding
-// is inactive (non-JSON body, wrap/select/search mode, collapsed body section).
+// is inactive (non-JSON body, wrap/select/search mode, or a non-Body tab).
 type foldState struct {
 	visible   []int       // full line indices in display order (hidden lines removed)
 	jsonFolds map[int]int // JSON-line open index -> matching close index

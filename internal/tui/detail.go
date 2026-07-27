@@ -57,14 +57,14 @@ type DetailModel struct {
 	showDiff       bool
 	diffText       string
 
-	// Tab state (replaces accordion folds)
+	// Tab state
 	reqTab  int // active tab index for request view (0=Body, 1=Headers, 2=Metadata)
 	respTab int // active tab index for response view (0=Body, 1=Headers, 2=Timing, 3=Assertions)
 
 	reqOffset  int
 	respOffset int
 
-	pendingZ bool
+	pendingZ  bool
 	pendingY  bool
 	pendingYG bool // waiting for language key after yg
 
@@ -78,7 +78,7 @@ type DetailModel struct {
 	searchIdx    int
 
 	// Persistent cursor
-	cursorLine int // persistent cursor line in accordion content
+	cursorLine int // persistent cursor line in the active tab's content
 	cursorCol  int // persistent cursor column (rune index)
 
 	// Visual selection mode (character-level)
@@ -154,7 +154,7 @@ var whichKeyGoto = []whichKeyEntry{
 var whichKeyNormal = []whichKeyEntry{
 	{"j/k", "navigate"}, {"v", "visual"}, {"V", "visual line"},
 	{"f", "search"}, {"y", "yank…"}, {"z", "fold…"},
-	{"g", "goto…"}, {"1-3", "tabs"}, {"⏎", "send"},
+	{"g", "goto…"}, {"1-4", "tabs (4=assertions)"}, {"⏎", "send"},
 	{"e", "edit"}, {"i", "inline edit"}, {"p", "pretty"},
 	{"w", "wrap"}, {"l", "line nums"}, {"?", "help"},
 }
@@ -1912,8 +1912,6 @@ func (m DetailModel) toggleBar() string {
 	}
 	return zone.Mark("dt:req", reqStyle.Render("[r] Request")) + dimStyle.Render("  │  ") + zone.Mark("dt:resp", respStyle.Render("[s] Response"))
 }
-
-
 
 const maxBodyDisplay = 512 * 1024
 

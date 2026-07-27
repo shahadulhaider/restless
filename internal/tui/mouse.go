@@ -85,7 +85,7 @@ func (m App) handleMouseClick(msg tea.MouseClickMsg) (App, tea.Cmd) {
 }
 
 // handleZoneClick dispatches a left click to a bubblezone-marked element
-// (browser row, [r]/[s] toggle, accordion header). The bool reports a hit.
+// (browser row, [r]/[s] toggle, tab, fold marker). The bool reports a hit.
 func (m App) handleZoneClick(msg tea.MouseClickMsg) (App, tea.Cmd, bool) {
 	for i := range m.browser.items {
 		if z := zone.Get(fmt.Sprintf("br:%d", i)); z != nil && z.InBounds(msg) {
@@ -170,7 +170,7 @@ func (m App) handleMouseMotion(msg tea.MouseMotionMsg) (App, tea.Cmd) {
 						m.detail.selectLineMode = false
 						m.detail.selectAnchor = m.detail.cursorLine
 						m.detail.selectAnchorCol = 0
-					m.detail.selectLines = m.detail.activeTabRawLines()
+						m.detail.selectLines = m.detail.activeTabRawLines()
 					}
 					m.detail.selectCursor = lineIdx
 					m.detail.selectCol = m.detail.selectLineLen(lineIdx)

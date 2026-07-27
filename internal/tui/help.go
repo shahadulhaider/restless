@@ -95,131 +95,27 @@ func (m HelpModel) View() string {
 
 // --- Full keybinding reference (?) ---
 
+// fullKeybindingReference renders keyReference (see keyref.go) for the in-app
+// `?` screen. docs/keybindings.md is rendered from the same data.
 func fullKeybindingReference() string {
 	title := lipgloss.NewStyle().Bold(true).Foreground(colorText)
 	section := lipgloss.NewStyle().Bold(true).Foreground(colorBorderActive)
 	key := lipgloss.NewStyle().Foreground(lipgloss.Color("#F9E2AF"))
 
 	var sb strings.Builder
-	sb.WriteString(title.Render("restless — Keyboard Reference") + "\n\n")
+	sb.WriteString(title.Render(keyReferenceTitle) + "\n\n")
 
-	sb.WriteString(section.Render("Global") + "\n")
-	writeKeys(&sb, key, [][2]string{
-		{"Tab", "Switch between browser and detail panes"},
-		{"/", "Fuzzy search requests"},
-		{"Ctrl+E", "Switch environment"},
-		{"n", "Create new request (internal editor)"},
-		{"e", "Edit with $EDITOR (falls back to internal)"},
-		{"E", "Edit with internal form editor"},
-		{"D", "Delete request (with confirmation)"},
-		{"Y", "Duplicate request"},
-		{"?", "This help screen"},
-		{"F1", "Context-sensitive help"},
-		{"q / Ctrl+C", "Quit"},
-	})
-
-	sb.WriteString("\n" + section.Render("Mouse") + "\n")
-	writeKeys(&sb, key, [][2]string{
-		{"Wheel", "Scroll the pane under the cursor"},
-		{"Click", "Focus a pane; select a request; expand a file/folder"},
-		{"Click [r]/[s]", "Switch Request / Response view"},
-		{"Click header", "Fold/unfold an accordion section"},
-		{"Click ▾/▸ line", "Fold/unfold the JSON node on that line"},
-		{"Drag divider", "Resize the browser / detail split"},
-	})
-
-	sb.WriteString("\n" + section.Render("Browser Pane") + "\n")
-	writeKeys(&sb, key, [][2]string{
-		{"j/k / ↑/↓", "Navigate requests"},
-		{"Enter", "Select / expand folder or file"},
-		{"N", "Create new .http file"},
-		{"F", "Create new folder"},
-		{"R", "Rename file or folder"},
-		{"M", "Move file or folder"},
-	})
-
-	sb.WriteString("\n" + section.Render("Detail Pane — Navigation") + "\n")
-	writeKeys(&sb, key, [][2]string{
-		{"r / s", "Switch to Request / Response view"},
-		{"Enter / Ctrl+R", "Send request"},
-	})
-
-	sb.WriteString("\n" + section.Render("Detail Pane — Folding") + "\n")
-	writeKeys(&sb, key, [][2]string{
-		{"1 / 2 / 3", "Toggle Body / Headers / Timing section"},
-		{"Space", "Toggle fold on section under cursor"},
-		{"za", "Fold/unfold the JSON object/array under the cursor"},
-		{"zo / zc", "Expand / collapse section under cursor"},
-		{"zR", "Expand all sections and JSON nodes"},
-		{"zM", "Collapse all sections"},
-	})
-
-	sb.WriteString("\n" + section.Render("Detail Pane — Scrolling") + "\n")
-	writeKeys(&sb, key, [][2]string{
-		{"j/k / ↑/↓", "Scroll line by line"},
-		{"Ctrl+D / Ctrl+U", "Scroll half page down / up"},
-		{"gg / G", "Jump to top / bottom"},
-	})
-
-	sb.WriteString("\n" + section.Render("Detail Pane — Selection") + "\n")
-	writeKeys(&sb, key, [][2]string{
-		{"v", "Enter visual selection mode (character-level)"},
-		{"h/l/j/k", "Move cursor while selecting"},
-		{"w/b", "Move by word while selecting"},
-		{"0/$", "Jump to start/end of line while selecting"},
-		{"y", "Copy the exact selection to clipboard"},
-		{"Esc", "Cancel selection"},
-		{"gp", "Jump to JSON path (type path, Enter to jump)"},
-	})
-
-	sb.WriteString("\n" + section.Render("Detail Pane — Body Viewer") + "\n")
-	writeKeys(&sb, key, [][2]string{
-		{"p", "Toggle pretty-print / raw"},
-		{"w", "Toggle word wrap"},
-		{"l", "Toggle line numbers"},
-		{"f", "Search in body"},
-		{"n / N", "Next / previous search match"},
-	})
-
-	sb.WriteString("\n" + section.Render("Yank (Copy to Clipboard)") + "\n")
-	writeKeys(&sb, key, [][2]string{
-		{"yb", "Copy body"},
-		{"yh", "Copy headers"},
-		{"ya", "Copy all (full request or response)"},
-		{"yc", "Copy as curl command"},
-		{"yl", "Copy current line"},
-		{"yp", "Copy JSON path at cursor"},
-		{"yv", "Copy JSON value at cursor path"},
-		{"yi", "Copy individual item (header or line)"},
-		{"yg + key", "Generate code (see below)"},
-	})
-
-	sb.WriteString("\n" + section.Render("Code Generation (yg + key)") + "\n")
-	writeKeys(&sb, key, [][2]string{
-		{"ygp", "Python (requests)"},
-		{"ygj", "JavaScript (fetch)"},
-		{"ygg", "Go (net/http)"},
-		{"ygv", "Java (HttpClient)"},
-		{"ygr", "Ruby (net/http)"},
-		{"ygh", "HTTPie"},
-		{"ygc", "curl"},
-		{"ygw", "PowerShell"},
-	})
-
-	sb.WriteString("\n" + section.Render("Internal Editor") + "\n")
-	writeKeys(&sb, key, [][2]string{
-		{"Tab / Shift+Tab", "Navigate fields"},
-		{"←/→", "Move cursor in text field"},
-		{"Ctrl+A / Home", "Jump to start of field"},
-		{"Ctrl+E / End", "Jump to end of field"},
-		{"Ctrl+W", "Delete word backward"},
-		{"Ctrl+U", "Clear to start of line"},
-		{"Ctrl+K", "Clear to end of line"},
-		{"Ctrl+D", "Delete header row"},
-		{"Ctrl+V / Cmd+V", "Paste (also works in search and prompts)"},
-		{"Ctrl+S", "Save"},
-		{"Esc", "Cancel"},
-	})
+	for i, sec := range keyReference {
+		if i > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString(section.Render(sec.Title) + "\n")
+		keys := make([][2]string, len(sec.Bindings))
+		for j, b := range sec.Bindings {
+			keys[j] = [2]string{b.Keys, b.Desc}
+		}
+		writeKeys(&sb, key, keys)
+	}
 
 	return sb.String()
 }
@@ -264,9 +160,14 @@ func contextHelp(ctx string) string {
 
 	case "detail-request":
 		sb.WriteString(title.Render("Request View — Help") + "\n\n")
-		sb.WriteString(tip.Render("View and send the selected request. Sections show body, headers, and metadata.") + "\n\n")
+		sb.WriteString(tip.Render("View and send the selected request. Tabs hold the body, headers, and metadata.") + "\n\n")
 
-		sb.WriteString(section.Render("Sending") + "\n")
+		sb.WriteString(section.Render("Tabs") + "\n")
+		writeKeys(&sb, key, [][2]string{
+			{"1 / 2 / 3", "Body / Headers / Metadata"},
+			{"Space", "Cycle to the next tab"},
+		})
+		sb.WriteString("\n" + section.Render("Sending") + "\n")
 		writeKeys(&sb, key, [][2]string{
 			{"Enter / Ctrl+R", "Send the request — response view opens automatically"},
 		})
@@ -274,6 +175,7 @@ func contextHelp(ctx string) string {
 		writeKeys(&sb, key, [][2]string{
 			{"e", "Open in $EDITOR for full editing power"},
 			{"E", "Open internal form editor"},
+			{"i", "Inline-edit here (focuses headers on the Headers tab)"},
 		})
 		sb.WriteString("\n" + section.Render("Variables") + "\n")
 		sb.WriteString("  Use " + key.Render("{{varName}}") + " in URL, headers, or body.\n")
@@ -288,24 +190,34 @@ func contextHelp(ctx string) string {
 			{"yb/yh/ya", "Copy body / headers / full request"},
 			{"yc", "Copy as curl command"},
 			{"yl/yp/yv/yi", "Copy line / JSON path / value / item"},
+			{"yf", "Copy the JSON fold block under the cursor"},
 			{"yg + key", "Generate code (Python, JS, Go, etc.)"},
-			{"v", "Character-level selection (h/l/j/k/w/b, y to copy)"},
+			{"v / V", "Character / line selection (h/l/j/k/w/b, y to copy)"},
 			{"gp", "Jump to JSON path"},
 		})
+		sb.WriteString("\n" + tip.Render("Press a prefix (g, z, y) or idle 1.5s for a which-key popup.") + "\n")
 
 	case "detail-response":
 		sb.WriteString(title.Render("Response View — Help") + "\n\n")
-		sb.WriteString(tip.Render("Inspect the response. Body is expanded by default. Fold sections with 1/2/3.") + "\n\n")
+		sb.WriteString(tip.Render("Inspect the response. It opens on the Body tab; switch tabs with 1/2/3/4 or Space.") + "\n\n")
 
-		sb.WriteString(section.Render("Sections") + "\n")
+		sb.WriteString(section.Render("Tabs") + "\n")
 		writeKeys(&sb, key, [][2]string{
-			{"1", "[Body] — response body with JSON/XML formatting"},
-			{"2", "[Headers] — response headers"},
-			{"3", "[Timing] — DNS, TLS, TTFB waterfall"},
-			{"Space", "Toggle fold on section under cursor"},
+			{"1", "Body — response body with JSON/XML formatting"},
+			{"2", "Headers — response headers"},
+			{"3", "Timing — DNS, TLS, TTFB waterfall"},
+			{"4", "Assertions — only when the request has assertions"},
+			{"Space", "Cycle to the next tab"},
+		})
+		sb.WriteString("\n" + tip.Render("A failing assertion opens the response on the Assertions tab.") + "\n")
+		sb.WriteString("\n" + section.Render("JSON Folding") + "\n")
+		writeKeys(&sb, key, [][2]string{
 			{"za", "Fold/unfold the JSON object/array under the cursor"},
-			{"zo/zc", "Open/close section (vim fold)"},
-			{"zR/zM", "Expand all (incl. JSON nodes) / collapse all sections"},
+			{"zR / zM", "Open / close all JSON folds"},
+		})
+		sb.WriteString("\n" + section.Render("History") + "\n")
+		writeKeys(&sb, key, [][2]string{
+			{"h", "Open the history overlay (j/k move, Enter loads, d diffs, Esc closes)"},
 		})
 		sb.WriteString("\n" + section.Render("Body Viewer") + "\n")
 		writeKeys(&sb, key, [][2]string{
@@ -324,10 +236,12 @@ func contextHelp(ctx string) string {
 			{"yp", "Copy JSON path at cursor"},
 			{"yv", "Copy JSON value at cursor path"},
 			{"yi", "Copy individual header or line"},
+			{"yf", "Copy the JSON fold block under the cursor"},
 			{"yg + key", "Generate code from the request"},
-			{"v", "Character-level selection (h/l/j/k/w/b, y to copy)"},
+			{"v / V", "Character / line selection (h/l/j/k/w/b, y to copy)"},
 			{"gp", "Jump to JSON path"},
 		})
+		sb.WriteString("\n" + tip.Render("Press a prefix (g, z, y) or idle 1.5s for a which-key popup.") + "\n")
 
 	case "editor":
 		sb.WriteString(title.Render("Request Editor — Help") + "\n\n")

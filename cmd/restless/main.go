@@ -22,6 +22,8 @@ func main() {
 }
 
 func rootCmd() *cobra.Command {
+	var envName string
+
 	root := &cobra.Command{
 		Use:   "restless [directory]",
 		Short: "A terminal-native HTTP client with TUI — uses .http files",
@@ -33,6 +35,7 @@ and manage collections without leaving the terminal.
 
   restless .                    Launch TUI in current directory
   restless ./my-api             Launch TUI for a specific collection
+  restless . --env dev          Launch TUI with "dev" environment selected
   restless run api.http         Run requests headlessly (CI/CD)
   restless import openapi spec  Import from OpenAPI, Postman, Insomnia, Bruno
 
@@ -47,10 +50,11 @@ Press ? in the TUI for keyboard shortcuts, or F1 for context-sensitive help.`,
 			if err != nil {
 				return fmt.Errorf("resolving directory: %w", err)
 			}
-			return tui.RunApp(abs)
+			return tui.RunApp(abs, envName)
 		},
 	}
 
+	root.Flags().StringVar(&envName, "env", "", "Start with this environment selected")
 	root.AddCommand(importCmd(), runCmd(), versionCmd())
 	return root
 }

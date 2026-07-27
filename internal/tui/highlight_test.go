@@ -53,7 +53,8 @@ func TestRequestBodyIsPrettyColorized(t *testing.T) {
 		Headers: []model.Header{{Key: "Content-Type", Value: "application/json"}},
 		Body:    `{"a":1}`,
 	}
-	content := m.buildRequestAccordion().content
+	colored := m.activeTabColoredLines()
+	content := strings.Join(colored, "\n")
 	assert.True(t, strings.Contains(content, "\x1b["))
 	assert.Contains(t, stripANSI(content), `"a": 1`)
 }

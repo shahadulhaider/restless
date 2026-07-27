@@ -48,7 +48,7 @@ func TestFoldRenderExpandedShowsAll(t *testing.T) {
 func TestToggleFoldAtCursor(t *testing.T) {
 	m := foldTestModel()
 	_ = m.View() // populate lastFold (bodyStart, jsonFolds)
-	m.respOffset = lastFold.bodyStart + 2
+	m.cursorLine = lastFold.bodyStart + 2
 	m.toggleFoldAtCursor()
 	assert.True(t, m.respCollapsed[2])
 	m.toggleFoldAtCursor()

@@ -45,6 +45,12 @@ changelog:
       - "^test:"
       - "^chore:"
 
+release:
+  # Re-running the Release job for a tag that already published its assets
+  # made GoReleaser fail with "422 already_exists" on every upload. Replacing
+  # existing artifacts keeps re-runs idempotent instead of red.
+  mode: replace
+
 brews:
   - name: restless
     homepage: https://github.com/shahadulhaider/restless

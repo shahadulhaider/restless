@@ -26,10 +26,19 @@ go.work.sum
 .sisyphus/
 .agents/
 
+# macOS
+.DS_Store
+
+# Desktop GUI build output. The GUI itself lives on wip/gui-wails, but its
+# artifacts sit in the working tree on every branch, so ignore them here too.
+/restless-app
+.task/
+frontend/node_modules/
+frontend/dist/
+cmd/restless-app/github.com/
+
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
-frontend/node_modules/
-frontend/dist/

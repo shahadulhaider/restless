@@ -661,9 +661,9 @@ func (m App) View() tea.View {
 		case m.focus == PaneDetail:
 			if m.detail.response != nil {
 				if m.detail.mode == modeResponse {
-					statusLine = " [r]req [s]resp │ 1/2/3:sec za:fold │ v:select │ y:yank │ gp:path │ f:find │ Enter:send"
+					statusLine = " [r]req [s]resp │ 1-4:tabs za:fold │ v:select │ y:yank │ gp:path │ f:find │ Enter:send"
 				} else {
-					statusLine = " [r]req [s]resp │ 1/2/3:sec za:fold │ v:select │ y:yank │ gp:path │ Enter:send"
+					statusLine = " [r]req [s]resp │ 1/2/3:tabs za:fold │ v:select │ y:yank │ gp:path │ Enter:send"
 				}
 			} else {
 				statusLine = " Enter:send │ e:edit │ q:quit"

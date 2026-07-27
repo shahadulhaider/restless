@@ -1,0 +1,14 @@
+@baseUrl = http://localhost:4010
+
+# region, tier and apiKey are defined per-environment in restless.env.json.
+# Switch environments with Ctrl+E, then send this to watch them resolve.
+
+# @name activeSession
+GET {{baseUrl}}/session?region={{region}}&tier={{tier}}
+Accept: application/json
+X-Api-Key: {{apiKey}}
+X-Api-Version: {{apiVersion}}
+
+# @assert status == 200
+# @assert body.$.credentials.source == "restless.env.json"
+# @assert body.$.quota.requestsPerMinute == 600

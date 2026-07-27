@@ -1,0 +1,16 @@
+@baseUrl = http://localhost:4010
+
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+Accept: application/json
+
+{
+  "email": "ada@northwind.dev",
+  "password": "correct-horse-battery-staple",
+  "requestedAt": "{{$isoTimestamp}}"
+}
+
+# @assert status == 200
+# @assert body.$.tokenType == "Bearer"
+# @assert body.$.account.plan.name == "Scale"

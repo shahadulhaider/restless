@@ -11,6 +11,8 @@ A full-featured HTTP client that runs entirely in your terminal. Uses `.http` fi
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Latest Release](https://img.shields.io/github/v/release/shahadulhaider/restless)](https://github.com/shahadulhaider/restless/releases)
 
+<img src="https://github.com/shahadulhaider/restless/releases/download/demo-assets/hero.gif" alt="Browsing a collection, sending a request, and folding the JSON response in restless" width="100%">
+
 </div>
 
 ---
@@ -78,6 +80,38 @@ restless run api.http
 - **Pre-request & post-response scripting** — JavaScript (ES5.1) via `# @pre-request { ... }` and `# @post-response { ... }` with crypto builtins (hmac, sha256, base64)
 - **Proxy & SSL** — `# @insecure`, `# @proxy`, `--insecure`, `--proxy` flags
 - **Readline/emacs editing** — `Ctrl+A/E/W/U/K`, arrow keys, word navigation, and paste (`Ctrl`/`Cmd`+`V`) in editor, search, and prompts
+
+## Demo
+
+<details>
+<summary><b>JSON folding and tabs</b> — collapse nodes with <code>za</code>, jump tabs with <code>1</code>–<code>4</code></summary>
+
+<img src="https://github.com/shahadulhaider/restless/releases/download/demo-assets/folding.gif" alt="Folding JSON nodes and switching between the Body, Headers and Timing tabs" width="100%">
+
+</details>
+
+<details>
+<summary><b>Visual selection and yank</b> — <code>v</code>/<code>V</code> to select, <code>yb</code>/<code>yc</code> to copy</summary>
+
+<img src="https://github.com/shahadulhaider/restless/releases/download/demo-assets/yank.gif" alt="Selecting response lines in visual mode and copying the body and a curl command" width="100%">
+
+</details>
+
+<details>
+<summary><b>Code generation</b> — <code>yg</code> then a language key</summary>
+
+<img src="https://github.com/shahadulhaider/restless/releases/download/demo-assets/codegen.gif" alt="The yg which-key popup listing languages, then generating JavaScript" width="100%">
+
+</details>
+
+<details>
+<summary><b>Environment switching</b> — <code>Ctrl+E</code> to swap variables</summary>
+
+<img src="https://github.com/shahadulhaider/restless/releases/download/demo-assets/envs.gif" alt="Switching environments and re-sending a request with the new variables resolved" width="100%">
+
+</details>
+
+> Recorded with [VHS](https://github.com/charmbracelet/vhs). The tapes and demo collection live in [`docs/demo/`](docs/demo/) — run `vhs docs/demo/hero.tape` to regenerate.
 
 ## Keyboard Shortcuts
 
